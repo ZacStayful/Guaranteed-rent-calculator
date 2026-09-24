@@ -41,7 +41,7 @@ export default async function BulkJobPage({
         initialRows={rows}
         initialCounts={counts}
         estimatedCostGbp={estimatedCostGbp(counts.pending)}
-        boardId={process.env.MONDAY_BOARD_ID || '5891626711'}
+        boardId={process.env.MONDAY_BOARD_ID || '18396542480'}
       />
     </div>
   );

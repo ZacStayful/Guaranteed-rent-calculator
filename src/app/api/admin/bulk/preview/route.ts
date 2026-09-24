@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       input_address: row.address,
       input_postcode: row.postcode,
       input_bedrooms: row.bedrooms,
+      input_desired_rent: row.desiredRentMonthly,
       input_guests: row.guests,
       warnings,
       monday_item_id: itemId,

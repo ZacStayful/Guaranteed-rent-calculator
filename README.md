@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Guaranteed Rent Calculator
 
-## Getting Started
+A landlord tells us the rent they want guaranteed. We tell them whether we can
+meet it, what we will pay, and what the property could earn as a short-term let.
 
-First, run the development server:
+Forked from the Stayful STR estimate software: same Next.js app, same Airbtics
+revenue engine, same six-page PDF. What changed is the question it answers.
+
+## How it works
+
+1. The landlord enters their property, their email, and the monthly rent they
+   want guaranteed.
+2. The analyser estimates short-term-let revenue from real Airbnb comparables
+   (Airbtics), plus long-let rent and a sale valuation (PropertyData), local
+   demand drivers (Google Places) and nearby events (Ticketmaster).
+3. `src/lib/guaranteedRent.ts` prices the deal: what we can pay while still
+   clearing £8,000 a year, and whether their ask fits inside it.
+4. They see the offer and their short-let income potential on screen and in a
+   PDF.
+5. The offer, the monthly profit and the band are written to the Monday lead,
+   and the PDF is attached to it.
+
+The model, the Monday column map and the reasoning behind both are documented in
+**[docs/GUARANTEED_RENT.md](docs/GUARANTEED_RENT.md)** — read that before
+changing any figure.
+
+## Running it
 
 ```bash
+npm install
+cp .env.example .env.local     # then fill it in
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Without API keys the analyser cannot run: `geocodePostcode` throws without
+`GOOGLE_PLACES_API_KEY`. To work on anything else, use the dry-run flags:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+PIPELINE_FAKE=1 MONDAY_DRY_RUN=1 npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`PIPELINE_FAKE=1` returns a deterministic analysis and calls no external API.
+`MONDAY_DRY_RUN=1` logs the exact column payload instead of writing it, so you
+can rehearse against the real board while mutating nothing.
 
-## Learn More
+## Checks
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm test                               # node --test, ~284 tests
+npm run lint
+npm run build
+npx tsx scripts/render-pdf-sample.mts  # 19 PDF cases, all must be exactly 6 pages
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The PDF sample's page count is the overflow canary — react-pdf pushes
+overflowing content onto a new page, so a seventh page is a layout regression.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Other docs
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [docs/GUARANTEED_RENT.md](docs/GUARANTEED_RENT.md) — the deal model and the CRM writes
+- [docs/BULK_UPLOAD.md](docs/BULK_UPLOAD.md) — screening a spreadsheet of leads in one run
+- [docs/INTERNAL_ANALYSE.md](docs/INTERNAL_ANALYSE.md) — the `/api/internal/analyse` contract
+- [AGENTS.md](AGENTS.md) — this is Next.js 16; check `node_modules/next/dist/docs/` before assuming an API

@@ -11,6 +11,7 @@
 import type { AnalysisResult, ShortLetData } from '../types.ts';
 import type { NormalisedInput } from '../pipeline/input.ts';
 import { calculateFinancials, assessRisk, generateVerdict, getRecommendation } from '../analysis.ts';
+import { assessGuaranteedRent } from '../guaranteedRent.ts';
 
 /** Small deterministic hash → a stable pseudo-random per input. */
 function seed(text: string): number {
@@ -67,7 +68,24 @@ export function fakeAnalysis(input: NormalisedInput): AnalysisResult {
   const risk = assessRisk(shortLet, longLet, demandDrivers, nearbyEvents);
   const verdict = generateVerdict(financials, risk);
 
-  const decision = getRecommendation(annualRevenue, monthlyRent);
+  // Same rent resolution the real pipeline uses: the landlord's figure when
+  // they gave one, otherwise the long-let rent marked as an estimate. Without
+  // this the fake path would carry no assessment and a PIPELINE_FAKE rehearsal
+  // would exercise none of the guaranteed-rent write — which is most of what
+  // there is to rehearse.
+  const hasDesiredRent =
+    typeof property.desiredRentMonthly === 'number'
+    && Number.isFinite(property.desiredRentMonthly)
+    && property.desiredRentMonthly > 0;
+  const guaranteedRent = assessGuaranteedRent({
+    grossStrAnnual: annualRevenue,
+    desiredRentMonthly: hasDesiredRent ? property.desiredRentMonthly : monthlyRent,
+    bedrooms: property.bedrooms,
+    desiredRentIsEstimate: !hasDesiredRent,
+    confidence: 'high',
+  });
+
+  const decision = getRecommendation(annualRevenue, monthlyRent, guaranteedRent.fixedCostsAnnual);
   const now = new Date().toISOString();
 
   return {
@@ -95,5 +113,6 @@ export function fakeAnalysis(input: NormalisedInput): AnalysisResult {
     createdAt: now,
     updatedAt: now,
     propertyValuation: null,
+    guaranteedRent,
   };
 }

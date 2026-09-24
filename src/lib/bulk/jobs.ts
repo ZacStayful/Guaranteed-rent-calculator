@@ -43,6 +43,7 @@ export interface BulkJobRow {
   input_postcode: string | null;
   input_bedrooms: number | null;
   input_guests: number | null;
+  input_desired_rent: number | null;
   warnings: RowWarning[];
   monday_item_id: string | null;
   monday_item_name: string | null;
@@ -91,6 +92,7 @@ export interface NewJobRow {
   input_postcode: string | null;
   input_bedrooms: number | null;
   input_guests: number | null;
+  input_desired_rent: number | null;
   warnings: RowWarning[];
   monday_item_id: string | null;
   monday_item_name: string | null;

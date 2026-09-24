@@ -52,6 +52,19 @@ re-upload just those.
 
 100 rows takes roughly 10–25 minutes.
 
+### The Desired rent column
+
+Optional. `Desired Rent`, `Asking Rent`, `Monthly Rent`, `Rent PCM` and
+`Guaranteed Rent` all match the header, and `£1,200`, `1200 pcm` and `1,200.50`
+all parse. A blank or unreadable cell is not an error — the rent falls back to
+the long-let valuation and the row is marked `desired_rent_source: estimated` in
+the results, so an estimate is never mistaken for the landlord's own answer.
+
+The results CSV carries the full screening — band, confidence, STR net, fixed
+costs, annual and monthly profit, required gross, gap, revenue multiple, max
+affordable rent and rent offered — ranked qualified first by annual profit.
+Rows that failed are still listed, with their gap, so near misses stay visible.
+
 ### Batch size
 
 Cap is 100 rows per upload (`BULK_MAX_ROWS`). A larger backlog runs as several
@@ -68,20 +81,27 @@ Exactly what a live single-property run writes:
 
 | Column | Value |
 |---|---|
-| Deal Analyser (`files__1`) | The generated PDF |
-| Stayful Net Analyser | Short-let net annual |
-| Long term let | Long-let annual (from the PropertyData estimate) |
-| STR Profit | True uplift |
-| Recommendation | Short-Let / Long-Let |
-| Qualified | Qualification band |
-| Status | Set to **Abandoned** when the lead is unqualified |
+| PDF analysis (`file_mkzt6hf1`) | The generated report |
+| Rent offered (`text_mkzxkfns`) | What we can pay, monthly |
+| Profit after guaranteed rent (`text_mkztftwn`) | Monthly profit **at the asking rent** |
+| Desired rent (`text_mkztg3z9`) | Only when the sheet carried a real figure |
+| Status (`status`) | The band — but only on an untriaged lead |
 
-Two things worth being deliberate about:
+Four things worth being deliberate about:
 
-- **Long term let gets overwritten** on every matched lead, including rows where
-  someone previously typed a real figure by hand. That follows from leaving the
-  rent blank so PropertyData estimates it.
-- **Unqualified leads are moved to Abandoned**, same as a live run.
+- **Nothing creates items.** Only leads already on the board are written to; a
+  row that matches nothing is reported as unmatched and skipped.
+- **Status is only set on an untriaged lead** — blank or "Yet to qualify".
+  Anyone already at "Viewing" or "Secured / Sold" is left alone, so a bulk run
+  cannot drag worked leads back down the pipeline.
+- **Desired rent is never overwritten with an estimate.** A blank cell in the
+  sheet means the rent is estimated from the long-let valuation, and an estimate
+  must not masquerade as the landlord's own answer.
+- **The profit written is at the asking rent**, not at the rent offered. Profit
+  at the offer is pinned near the £8,000 target by construction, so it would be
+  the same number on every row.
+
+Full column map and reasoning: [GUARANTEED_RENT.md](GUARANTEED_RENT.md).
 
 Each row's prior column values are snapshotted into
 `bulk_job_rows.monday_prev_values` before writing, so a bad run can be rolled
@@ -96,12 +116,11 @@ back by script. Monday itself has no undo.
 A failed upstream call does **not** surface as an error. `getShortLetData`
 swallows everything — a 429, exhausted credit, a 500 — and returns either zero
 or `generateMarketEstimate()`, a synthetic figure that looks entirely plausible.
-The analysis then "succeeds", and a zero or synthetic revenue drives the lead to
-`unqualified` → **Abandoned**.
+The analysis then "succeeds", and a synthetic revenue would produce a real rent
+offer on a fabricated figure — a number a landlord could hold us to.
 
-For one lead that is unfortunate. For a 100-row batch during an outage it
-silently abandons 100 real leads on fabricated data, every row reporting
-success.
+For one lead that is unfortunate. For a 100-row batch during an outage it is 100
+offers made on data that does not exist, every row reporting success.
 
 So bulk refuses to write to the CRM unless the data is demonstrably real:
 revenue above zero, comparables actually found, and quality above `low`. Gated
@@ -160,7 +179,7 @@ Do it in stages. `BULK_MAX_ROWS` exists so you can.
 |---|---|---|
 | 0 | 1 row, real APIs, `MONDAY_DRY_RUN=1`. Diff the logged payload against a live single-property run of the same property. | ~£0.50 |
 | 1 | 1 row, real write, pointed at a **dummy lead** you create (or a duplicate board via `MONDAY_BOARD_ID`). | ~£0.50 |
-| 2 | 5 real rows, watched live. Check the Abandoned transitions are ones you actually want. | ~£2.50 |
+| 2 | 5 real rows, watched live. Check the Status transitions are ones you actually want. | ~£2.50 |
 | 3 | Full 100. | ~£50 |
 
 Reconcile after each: succeeded row count vs `analyser_reports` where
@@ -223,12 +242,12 @@ minute-by-minute heartbeat without upgrading.
 
 ---
 
-## Known issue, out of scope
+## Fixed at the fork
 
-`/api/get-report` reads the report PDF from column `file_mm1daxvv`, which is
-**"Call recordings"** — not `files__1` ("Deal Analyser") where the PDF is
-actually written. The `/report` page therefore returns the wrong file. Not
-touched here; worth a separate fix.
+`/api/get-report` used to read the report from a different column than uploads
+were written to, so the `/report` page could never find an analyser-generated
+PDF. It now shares the board and column configuration with the rest of the
+integration rather than keeping a second, drifting copy.
 
 ---
 

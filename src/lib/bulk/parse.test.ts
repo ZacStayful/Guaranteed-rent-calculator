@@ -256,3 +256,61 @@ test('reads a real .xlsx, including Excel eating a phone number leading zero', a
   assert.equal(third.blocking, true);
   assert.ok(third.warnings.includes('missing_postcode'));
 });
+
+// ─── Desired rent ─────────────────────────────────────────────────
+// Optional by design: a sheet without the column still runs, and the
+// assessment estimates the rent rather than the row being blocked.
+
+const RENT_HEADER = 'Email,Phone,Address,Bedrooms,Desired Rent\n';
+
+test('reads a plain desired rent', async () => {
+  const result = await csv(
+    RENT_HEADER + 'a@b.com,07896959558,"12 High Street, NG1 5GY",2,1200\n',
+  );
+  assert.equal(result.rows[0].desiredRentMonthly, 1200);
+  assert.equal(result.rows[0].blocking, false);
+});
+
+test('reads desired rent however the sheet writes money', async () => {
+  const cases: Array<[string, number]> = [
+    ['£1200', 1200],
+    ['"£1,200"', 1200],
+    ['"1,200.50"', 1200.5],
+    ['1200 pcm', 1200],
+    ['£950 per month', 950],
+  ];
+  for (const [cell, expected] of cases) {
+    const result = await csv(
+      RENT_HEADER + `a@b.com,07896959558,"12 High Street, NG1 5GY",2,${cell}\n`,
+    );
+    assert.equal(result.rows[0].desiredRentMonthly, expected, `for ${cell}`);
+  }
+});
+
+test('accepts desired-rent header synonyms', async () => {
+  for (const header of ['Asking Rent', 'Monthly Rent', 'Rent PCM', 'Guaranteed Rent']) {
+    const result = await csv(
+      `Email,Phone,Address,Bedrooms,${header}\n` +
+      'a@b.com,07896959558,"12 High Street, NG1 5GY",2,1200\n',
+    );
+    assert.equal(result.rows[0].desiredRentMonthly, 1200, `for ${header}`);
+  }
+});
+
+test('an unreadable or absent rent becomes null without blocking the row', async () => {
+  for (const cell of ['', 'ask me', '0', '-500']) {
+    const result = await csv(
+      RENT_HEADER + `a@b.com,07896959558,"12 High Street, NG1 5GY",2,${cell}\n`,
+    );
+    assert.equal(result.rows[0].desiredRentMonthly, null, `for "${cell}"`);
+    assert.equal(result.rows[0].blocking, false, `for "${cell}"`);
+  }
+});
+
+test('a sheet with no rent column at all still parses', async () => {
+  const result = await csv(
+    HEADER + 'a@b.com,07896959558,"12 High Street, NG1 5GY",2\n',
+  );
+  assert.equal(result.rows[0].desiredRentMonthly, null);
+  assert.equal(result.rows[0].blocking, false);
+});

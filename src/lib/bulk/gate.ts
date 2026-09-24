@@ -33,7 +33,10 @@ export interface GateVerdict {
  * the quality report — runAnalysis, mid-pipeline — can ask the same question
  * without fabricating a whole result object to ask it with.
  */
-export type RevenueRealityCheckInput = Pick<AnalysisResult, 'shortLet' | 'dataQuality'>;
+export interface RevenueRealityCheckInput {
+  shortLet?: { annualRevenue?: number | null } | null;
+  dataQuality?: { comparablesFound?: number | null; level?: string | null } | null;
+}
 
 /**
  * Is this revenue figure market data, or did the upstream call fail and leave a

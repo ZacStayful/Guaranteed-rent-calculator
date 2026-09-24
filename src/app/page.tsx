@@ -434,6 +434,9 @@ export default function HomePage() {
   const [monthlyMortgage, setMonthlyMortgage] = useState("");
   const [monthlyBills, setMonthlyBills] = useState("");
   const [longLetMonthly, setLongLetMonthly] = useState("");
+  // What the landlord wants guaranteed. Required: it is the rent we would be
+  // paying, so there is no offer to make without it.
+  const [desiredRentMonthly, setDesiredRentMonthly] = useState("");
   const [longLetNotSure, setLongLetNotSure] = useState(false);
 
   // ── Session timer: pushed to Monday via sendBeacon on tab close ──
@@ -682,7 +685,8 @@ export default function HomePage() {
           outdoorSpace,
           propertyType,
           longLetNotSure,
-          ...(!longLetNotSure && longLetMonthly !== "" && { longLetMonthly: Number(longLetMonthly) }),
+          desiredRentMonthly: Number(desiredRentMonthly),
+      ...(!longLetNotSure && longLetMonthly !== "" && { longLetMonthly: Number(longLetMonthly) }),
           ...(monthlyMortgage !== "" && { monthlyMortgage: Number(monthlyMortgage) }),
           ...(monthlyBills !== "" && { monthlyBills: Number(monthlyBills) }),
         }),
@@ -928,14 +932,25 @@ export default function HomePage() {
   }
 
   // ─── Decision Screen ────────────────────────────────────────────
-  // Short-let leads only. They are the ones worth a conversation, so they get
-  // the verdict and an unmissable booking CTA before any detail.
+  // Short-let leads only, and only when there is no guaranteed rent to lead
+  // with. They are the ones worth a conversation, so they get the verdict and
+  // an unmissable booking CTA before any detail.
   //
   // Long-let leads (and a missing recommendation, e.g. demo mode) skip this
   // entirely and fall through to the report below — an interstitial telling
   // them "no" before they can see a single number is a dead end.
+  //
+  // A lead WITH an offer skips it too, for the opposite reason. They asked what
+  // we would pay them; "short-let recommended, £X more in your pocket if you
+  // run it yourself" answers a question they did not ask and argues against the
+  // offer waiting on the next screen. They go straight to the offer.
 
-  if (result && result.recommendation?.recommendation === "SHORT_LET" && !showBreakdown) {
+  if (
+    result
+    && result.recommendation?.recommendation === "SHORT_LET"
+    && !result.guaranteedRent?.hasOffer
+    && !showBreakdown
+  ) {
     const rec = result.recommendation;
     const isShortLet = rec.recommendation === "SHORT_LET";
     const upliftWhole = Math.round(rec.upliftPct * 100);
@@ -1657,6 +1672,92 @@ export default function HomePage() {
                   {r.property.bedrooms} bed &middot; bath &middot; Sleeps {r.property.guests}
                 </p>
               </div>
+
+              {/* ── The guaranteed rent offer ──
+                  First thing on the page, because it is what the landlord came
+                  for. The band, the gap and the revenue multiple that travel on
+                  the same object are our screening notes and stay off-screen.
+
+                  The comparison shown is the ask against the offer, not the
+                  offer against the short-let net: those are not comparable
+                  (the short-let figure still has the landlord carrying bills,
+                  voids, furnishing and the work), and putting them side by side
+                  argues against the offer. The short-let income potential is
+                  directly below, which is where it belongs. */}
+              {(() => {
+                const gr = r.guaranteedRent;
+                if (!gr) return null;
+                const offer = gr.hasOffer ? gr.offerRentMonthly ?? 0 : 0;
+                const ask = gr.desiredRentMonthly ?? 0;
+
+                if (offer <= 0) {
+                  return (
+                    <div className="mb-8 rounded-xl bg-primary-foreground/10 p-5 ring-1 ring-primary-foreground/20">
+                      <p className="text-xs uppercase tracking-wider text-primary-foreground/70">
+                        Guaranteed rent
+                      </p>
+                      <p className="mt-2 text-lg font-semibold">
+                        We can&apos;t put a guaranteed rent on this one yet.
+                      </p>
+                      <p className="mt-2 max-w-2xl text-sm text-primary-foreground/80">
+                        {gr.band === "INSUFFICIENT_DATA"
+                          ? "We couldn't get enough short-let data for this property to price it properly. The figures below are our best estimate — talk to us and we'll look at it by hand."
+                          : "On these numbers the short-let income wouldn't cover a guaranteed rent on top of running costs. Your income potential as a short-term let is below, and it's worth a conversation either way."}
+                      </p>
+                      <Button
+                        className="mt-4 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+                        onClick={() => {
+                          trackBooking("offer_no_offer_book_call");
+                          window.open(bookingUrlFor(r), "_blank");
+                        }}
+                      >
+                        Talk it through with us
+                      </Button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mb-8 rounded-xl bg-primary-foreground/10 p-5 ring-1 ring-primary-foreground/20">
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-wider text-primary-foreground/70">
+                          Your guaranteed rent offer
+                        </p>
+                        <p className="mt-1 text-4xl font-bold leading-tight">
+                          {gbp(offer)}
+                          <span className="ml-2 text-base font-normal text-primary-foreground/80">
+                            per month
+                          </span>
+                        </p>
+                        <p className="mt-1 text-sm text-primary-foreground/80">
+                          {gbp(offer * 12)} a year, paid whether the property is booked or not.
+                        </p>
+                        <p className="mt-3 max-w-xl text-sm text-primary-foreground/90">
+                          {gr.offerMeetsAsk
+                            ? `That matches the ${gbp(ask)} a month you asked for.`
+                            : `You asked for ${gbp(ask)} a month. ${gbp(offer)} is the most we can guarantee on this property — worth a conversation.`}
+                        </p>
+                      </div>
+                      <div className="shrink-0">
+                        <Button
+                          size="lg"
+                          className="w-full bg-primary-foreground text-primary hover:bg-primary-foreground/90 lg:w-auto"
+                          onClick={() => {
+                            trackBooking("offer_book_call");
+                            window.open(bookingUrlFor(r), "_blank");
+                          }}
+                        >
+                          {gr.offerMeetsAsk ? "Confirm this rent" : "Discuss this offer"}
+                        </Button>
+                        <p className="mt-2 text-center text-[11px] text-primary-foreground/70 lg:text-right">
+                          Free 30-minute call
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {grossAnnual > 0 ? (
                 <>
@@ -3652,12 +3753,12 @@ export default function HomePage() {
               priority
             />
             <h1 className="mb-4 text-3xl font-bold tracking-tight text-primary-foreground sm:text-4xl lg:text-5xl">
-              Short-Term Rental Property Analyser
+              Guaranteed Rent Calculator
             </h1>
             <p className="mb-8 max-w-2xl text-lg text-primary-foreground/80">
-              Get a comprehensive revenue analysis for your property. Compare
-              short-term rental potential against traditional letting with real
-              market data.
+              Tell us the rent you want guaranteed and we&apos;ll tell you whether we
+              can meet it — along with what your property could earn as a short-term
+              let, from real market data.
             </p>
           </div>
         </div>
@@ -3940,6 +4041,31 @@ export default function HomePage() {
 
                 {/* Current long-term let rent — feeds the qualification decision */}
                 <div className="space-y-2">
+                  <Label htmlFor="desiredRentMonthly" className="flex items-center gap-2">
+                    <Home className="h-4 w-4" aria-hidden="true" />
+                    What monthly rent would you want guaranteed?
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">£</span>
+                    <Input
+                      type="number"
+                      id="desiredRentMonthly"
+                      required
+                      min={1}
+                      step={1}
+                      placeholder="e.g. 1200"
+                      className="pl-7"
+                      value={desiredRentMonthly}
+                      onChange={(e) => setDesiredRentMonthly(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Paid every month, whether the property is booked or not. We&apos;ll tell you
+                    straight away whether we can meet it.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="longLetMonthly" className="flex items-center gap-2">
                     <Home className="h-4 w-4" aria-hidden="true" />
                     What would this property currently rent for as a standard long-term let, per month?
@@ -3995,7 +4121,7 @@ export default function HomePage() {
 
                 <Button type="submit" className="w-full" disabled={loading}>
                   <Search className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Get Free Analysis
+                  Get my rent offer
                 </Button>
               </form>
             </CardContent>

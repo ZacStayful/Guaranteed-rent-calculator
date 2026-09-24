@@ -481,12 +481,17 @@ export async function incrementAnalyserUseCount(email: string): Promise<void> {
 }
 
 /**
- * Money as this board already writes it: "£1,234.00", "-£500.00".
+ * Money as this board already writes it: "£1200.00", "-£500.00".
  *
- * The 299 leads already on the board use this exact shape, and the board's
- * formula column subtracts one of these from another, so a bare number here
- * would read oddly next to them. Figures shown to the landlord are whole
- * pounds; only these two CRM columns carry the pence.
+ * Matches the shape of the leads already on the board rather than writing a
+ * bare number, so a calculator-written row is indistinguishable from a
+ * hand-written one.
+ *
+ * Note the board has a formula column doing {Desired rent} - {Rent offered}.
+ * Monday evaluates formula columns in the UI only — they always read back empty
+ * over the API — so whether it parses the "£" could not be verified from here.
+ * If it turns out blank in the board view, dropping the prefix and the pence
+ * from this one function is the whole fix.
  */
 function gbpColumnValue(amount: number): string {
   const sign = amount < 0 ? "-" : "";

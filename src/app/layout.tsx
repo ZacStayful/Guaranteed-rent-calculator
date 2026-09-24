@@ -9,9 +9,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Stayful Property Analyser | Short-Term Rental Income Calculator",
+  title: "Stayful Guaranteed Rent Calculator | Fixed Monthly Rent for Landlords",
   description:
-    "Analyse your property's short-term rental potential with Stayful. Compare Airbnb income vs long-term let, view local demand drivers, and get a comprehensive risk assessment.",
+    "Find out what Stayful will pay you in guaranteed rent, and what your property could earn as a short-term let. Real market data, a fixed monthly figure, and no costs or void periods on your side.",
   generator: "Stayful",
   icons: {
     icon: [

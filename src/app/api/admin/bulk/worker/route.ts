@@ -114,6 +114,10 @@ async function processRow(row: BulkJobRow, claimToken: string, renderLock: Retur
     guests: row.input_guests,
     email: row.input_email,
     phone: row.input_phone,
+    // The asking rent the sheet carried, if any. A blank cell leaves this
+    // undefined and the assessment falls back to the estimated long-let rent,
+    // flagged as an estimate — the sheet is not required to have the column.
+    desiredRentMonthly: row.input_desired_rent ?? undefined,
     // Long-let rent is deliberately left unset so PropertyData estimates it,
     // exactly as when a lead ticks "Not sure" on the public form.
   });

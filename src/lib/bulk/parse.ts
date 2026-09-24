@@ -24,7 +24,7 @@ import { extractPostcodes } from '../utils/postcode.ts';
 import { normaliseUkPhone } from '../utils/phone.ts';
 import { BLOCKING_WARNINGS, type RowWarning } from './warnings.ts';
 
-export type BulkField = 'email' | 'phone' | 'address' | 'bedrooms';
+export type BulkField = 'email' | 'phone' | 'address' | 'bedrooms' | 'desiredRent';
 
 // Warning types and labels live in ./warnings.ts, which is client-safe — this
 // module is server-only. Re-exported for convenience on the server.
@@ -41,6 +41,12 @@ export interface ParsedRow {
   postcode: string | null;
   bedrooms: number | null;
   guests: number | null;
+  /**
+   * Monthly rent the landlord is asking for, in GBP. Optional — a blank cell
+   * falls back to the estimated long-let rent and is flagged as an estimate in
+   * the assessment, rather than blocking the row.
+   */
+  desiredRentMonthly: number | null;
   warnings: RowWarning[];
   /** True when the row cannot be run and must be skipped. */
   blocking: boolean;
@@ -71,6 +77,11 @@ const FIELD_ALIASES: Record<BulkField, string[]> = {
   address: [
     'address', 'propertyaddress', 'fulladdress', 'addressline1', 'address1',
     'property', 'propertyaddressline1',
+  ],
+  desiredRent: [
+    'desiredrent', 'desiredmonthlyrent', 'rentwanted', 'rentrequired',
+    'askingrent', 'monthlyrent', 'rent', 'rentpcm', 'guaranteedrent',
+    'desiredmarketrent', 'marketrent',
   ],
   bedrooms: [
     'bedrooms', 'bedroom', 'beds', 'bed', 'numberofbedrooms', 'noofbedrooms',
@@ -117,6 +128,26 @@ function parseBedrooms(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Read a monthly rent out of a spreadsheet cell.
+ *
+ * Sheets carry these as "£1,200", "1200 pcm", "1,200.00" and occasionally as a
+ * real number, so the currency symbol, thousands separators and any trailing
+ * words are stripped before parsing. A negative or zero is rejected rather than
+ * passed on: it would produce a nonsense offer downstream.
+ *
+ * Returns null for anything unreadable, which is not an error — the assessment
+ * falls back to an estimated market rent and says so.
+ */
+function parseMoney(raw: string): number | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[£,\s]/g, '');
+  const match = cleaned.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const n = Number.parseFloat(match[0]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function isRowBlank(cells: unknown[]): boolean {
   return cells.every((c) => cellToString(c) === '');
 }
@@ -143,10 +174,10 @@ function detectHeader(rows: unknown[][]): {
   for (let i = 0; i < limit; i++) {
     const cells = rows[i] ?? [];
     const columnIndex: Record<BulkField, number | null> = {
-      email: null, phone: null, address: null, bedrooms: null,
+      email: null, phone: null, address: null, bedrooms: null, desiredRent: null,
     };
     const headerMap: Record<BulkField, string | null> = {
-      email: null, phone: null, address: null, bedrooms: null,
+      email: null, phone: null, address: null, bedrooms: null, desiredRent: null,
     };
 
     cells.forEach((cell, col) => {
@@ -317,6 +348,11 @@ export async function parseSpreadsheet(
 
     const validBedrooms = bedrooms !== null && bedrooms >= 0 && bedrooms <= 10 ? bedrooms : null;
 
+    // ── Desired rent. Optional, and deliberately lenient: sheets carry "£1,200",
+    //    "1200 pcm" and "1,200.00". Anything we cannot read becomes null and is
+    //    estimated downstream rather than blocking the row.
+    const desiredRentMonthly = parseMoney(at('desiredRent'));
+
     // ── Duplicate detection within this sheet
     if (postcode && address) {
       const key = `${postcode}|${address.toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
@@ -330,6 +366,7 @@ export async function parseSpreadsheet(
       phone: parsedPhone?.national ?? (rawPhone || null),
       phoneE164: parsedPhone?.e164 ?? null,
       address,
+      desiredRentMonthly,
       postcode,
       bedrooms: validBedrooms,
       guests: validBedrooms === null ? null : defaultGuests(validBedrooms),
