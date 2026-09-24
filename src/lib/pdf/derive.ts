@@ -5,6 +5,7 @@ import type {
   ShortLetComparable,
 } from "@/lib/types";
 import { PDF_COST_RATES } from "./theme";
+import type { GuaranteedRentAssessment } from "@/lib/guaranteedRent";
 // Pure data + pricing logic (no JSX, no "use client") — safe on the server.
 import { buildDefaultLineItems } from "@/components/SetupCalculator/lineItemDefaults";
 
@@ -186,6 +187,15 @@ export interface PdfReportData {
   setupPaybackMonths: number | null;
   /** Short-let vs long-let verdict. Undefined when it could not be computed. */
   recommendation?: RecommendationDecision;
+  /**
+   * The guaranteed-rent screening and offer, carried through unchanged.
+   *
+   * The pages show the offer and the working behind it; the band, the gap and
+   * the revenue multiple travel with it for the CRM and the bulk export but are
+   * deliberately NOT printed — "UNQUALIFIED" is a note to ourselves, not
+   * something to hand a landlord.
+   */
+  guaranteedRent?: GuaranteedRentAssessment;
 }
 
 /**
@@ -689,6 +699,7 @@ export function deriveReportData(result: AnalysisResult, preparedFor?: string): 
     monthly,
     comparables,
     comparablesTotal: shortLet.comparables.length,
+    guaranteedRent: result.guaranteedRent,
     compsBenchmark,
     marketTargets: {
       matchNightly: compsBenchmark.avgNightly,

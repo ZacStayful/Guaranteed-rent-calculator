@@ -22,7 +22,7 @@ export const TOTAL_PAGES = 6;
 
 /** The section names, indexed by page number. */
 export const SECTIONS = [
-  "THE VERDICT",
+  "YOUR OFFER",
   "THE NUMBERS",
   "THE MARKET",
   "LOCATION & RISK",

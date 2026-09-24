@@ -176,12 +176,20 @@ function InfoMark() {
  */
 export function Page5SetupCosts({ data }: { data: PdfReportData }) {
   const setup = data.setup;
+  // Under a guaranteed rent these costs are ours, not the landlord's. The page
+  // still earns its place — it is what doing this themselves would cost, which
+  // is exactly the comparison the offer is asking them to make — but it must
+  // not read as a bill.
+  const coveredByUs = Boolean(data.guaranteedRent?.hasOffer);
+  const heading = coveredByUs
+    ? "What getting it launch-ready costs — and who pays"
+    : "What it takes to get launch-ready";
 
   if (!setup) {
     return (
       <ReportPage meta={data.meta} page={5}>
         <Eyebrow>05 — SETUP COSTS</Eyebrow>
-        <Heading>What it takes to get launch-ready</Heading>
+        <Heading>{heading}</Heading>
         <Text style={s.emptyNote}>
           Setup costs weren&apos;t available for this property.
         </Text>
@@ -199,10 +207,11 @@ export function Page5SetupCosts({ data }: { data: PdfReportData }) {
   return (
     <ReportPage meta={data.meta} page={5}>
       <Eyebrow>05 — SETUP COSTS</Eyebrow>
-      <Heading>What it takes to get launch-ready</Heading>
+      <Heading>{heading}</Heading>
       <Lede>
-        Itemised estimate for this property, {setup.furnishingLabel.toLowerCase()}. All
-        figures inclusive, supplier noted per item.
+        {coveredByUs
+          ? `Itemised estimate for this property, ${setup.furnishingLabel.toLowerCase()}. Under a guaranteed rent agreement Stayful covers every line below — this is what it would cost you to do it yourself.`
+          : `Itemised estimate for this property, ${setup.furnishingLabel.toLowerCase()}. All figures inclusive, supplier noted per item.`}
       </Lede>
 
       {setup.indicative ? (

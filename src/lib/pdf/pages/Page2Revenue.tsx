@@ -170,7 +170,11 @@ export function Page2Revenue({ data }: { data: PdfReportData }) {
     <ReportPage meta={data.meta} page={2}>
       <Eyebrow>02 — THE NUMBERS</Eyebrow>
       <Heading>Where every pound goes</Heading>
-      <Lede>Both options drawn on the same scale, so the gap is exactly as big as it looks.</Lede>
+      <Lede>
+        {data.guaranteedRent?.hasOffer
+          ? "What the property would earn if you ran it yourself, drawn to scale. Your guaranteed rent carries none of these costs."
+          : "Both options drawn on the same scale, so the gap is exactly as big as it looks."}
+      </Lede>
 
       <View style={s.barBlock}>
         <View style={s.barHead}>

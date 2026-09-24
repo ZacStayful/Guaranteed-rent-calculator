@@ -15,6 +15,7 @@ import { DEMO_MANCHESTER, DEMO_RESULT } from "@/lib/demo-data";
 import { assessRisk } from "@/lib/analysis";
 import { buildDefaultLineItems } from "@/components/SetupCalculator/lineItemDefaults";
 import type { AnalysisResult } from "@/lib/types";
+import { assessGuaranteedRent, confidenceFromDataQuality } from "@/lib/guaranteedRent";
 
 const outDir = process.argv[2] ?? path.join(process.cwd(), ".pdf-preview");
 mkdirSync(outDir, { recursive: true });
@@ -150,6 +151,58 @@ const cases: Case[] = [
     },
   },
 ];
+
+// ── Guaranteed-rent variants ──
+// Pages 01, 02, 05 and 06 all branch on the offer, so each branch needs a case.
+// The gross here (£39,131 on the Manchester fixture) drives what is affordable:
+// at 2 bedrooms, max rent is (39,131 x 0.44 - 4,704 - 8,000) / 12 = £378/mo.
+function withOffer(result: AnalysisResult, desiredRentMonthly: number | null): AnalysisResult {
+  return {
+    ...result,
+    property: { ...result.property, desiredRentMonthly },
+    guaranteedRent: assessGuaranteedRent({
+      grossStrAnnual: result.shortLet.annualRevenue,
+      desiredRentMonthly,
+      bedrooms: result.property.bedrooms,
+      desiredRentIsEstimate: desiredRentMonthly === null,
+      confidence: confidenceFromDataQuality(result.dataQuality),
+    }),
+  };
+}
+
+cases.push(
+  // Ask is under the cap: the landlord gets exactly what they asked for.
+  { name: "14-offer-meets-ask", result: withOffer(base, 300), email: "lead@email.com" },
+  // Ask is over the cap: the offer is our maximum, and page 01 says so.
+  { name: "15-offer-capped", result: withOffer(base, 1500), email: "lead@email.com" },
+  {
+    name: "16-offer-capped-with-setup",
+    result: withOffer(base, 1500),
+    email: "lead@email.com",
+    setup: { furnishing: "fully", bedrooms: 2, items: buildDefaultLineItems("fully", 2) },
+  },
+  // Nothing left after costs and target — every page falls back to the
+  // short-let framing rather than printing an offer of nothing.
+  {
+    name: "17-no-viable-offer",
+    result: withOffer(
+      { ...base, shortLet: { ...base.shortLet, annualRevenue: 12000 } },
+      900,
+    ),
+  },
+  // Unscreenable: band is INSUFFICIENT_DATA, so hasOffer is false throughout.
+  { name: "18-insufficient-data", result: withOffer({ ...base, shortLet: { ...base.shortLet, annualRevenue: 0 } }, 900) },
+  // A five-bedroom offer, to exercise the widest figures on page 06.
+  {
+    name: "19-offer-5bed",
+    result: withOffer(
+      { ...base, property: { ...base.property, bedrooms: 5, guests: 12 }, shortLet: { ...base.shortLet, annualRevenue: 95000 } },
+      1800,
+    ),
+    email: "a.very.long.lead.email.address@somewhat-long-domain-name.co.uk",
+    setup: { furnishing: "unfurnished", bedrooms: 5, items: buildDefaultLineItems("unfurnished", 5) },
+  },
+);
 
 const GLYPHS = ["£", "·", "—", "≈", "÷", "→", "−", "–"];
 

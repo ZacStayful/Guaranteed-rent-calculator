@@ -12,7 +12,7 @@ import {
 } from "../theme";
 import { ReportPage, Eyebrow, Heading, Lede, Check } from "../components/Primitives";
 import { QR_PATH } from "../components/Chrome";
-import { formatGbpSigned } from "../components/format";
+import { formatGbp, formatGbpSigned } from "../components/format";
 import type { PdfReportData } from "../derive";
 
 const mono = fontFamily("MONO");
@@ -57,6 +57,48 @@ const CTA_POINTS = [
   "How we rank in the top 20% of listings on the platforms",
   "How we protect your property from guests",
   "What our service looks like from your side",
+] as const;
+
+// ── Guaranteed-rent variants ──
+// Shown instead of the management-service copy above when the report carries an
+// offer. The landlord is not choosing a management service here; they are
+// choosing a fixed rent, so the steps, the list and the call agenda change.
+const GUARANTEED_STEPS = [
+  {
+    n: "STEP 01",
+    title: "Agree the rent",
+    body: "We confirm the monthly figure and the term, and put it in writing.",
+  },
+  {
+    n: "STEP 02",
+    title: "We get it ready",
+    body: "Furnishing, photography and the listing — arranged and paid for by us.",
+  },
+  {
+    n: "STEP 03",
+    title: "We take the risk",
+    body: "Bookings, guests, cleaning and quiet months are ours to manage, not yours.",
+  },
+  {
+    n: "STEP 04",
+    title: "You get paid",
+    body: "The same rent lands every month, whether the property is booked or empty.",
+  },
+] as const;
+
+const GUARANTEED_HANDLED = [
+  "Void periods",
+  "Setup and furnishing",
+  "Guest management",
+  "Cleaning coordination",
+  "Listing and pricing",
+] as const;
+
+const GUARANTEED_CTA_POINTS = [
+  "The term, the notice period and how the agreement works",
+  "When your first payment lands and how it is paid",
+  "How we look after the property and handle guests",
+  "What happens at the end of the term",
 ] as const;
 
 const s = StyleSheet.create({
@@ -208,23 +250,37 @@ export function Page6Plan({ data }: { data: PdfReportData }) {
   const { growth } = data;
   const isLongLet = data.recommendation === "LONG_LET";
 
+  const gr = data.guaranteedRent;
+  const hasOffer = Boolean(gr?.hasOffer && gr.offerRentMonthly);
+  const offerMonthly = gr?.offerRentMonthly ?? 0;
+  const offerAnnual = offerMonthly * 12;
+  const askAnnual = (gr?.desiredRentMonthly ?? 0) * 12;
+  const offerVsAsk = offerAnnual - askAnnual;
+
+  const steps = hasOffer ? GUARANTEED_STEPS : STEPS;
+  const handled = hasOffer ? GUARANTEED_HANDLED : HANDLED;
+
   return (
     <ReportPage meta={data.meta} page={6}>
       <Eyebrow>06 — THE PLAN</Eyebrow>
-      <Heading>How Stayful grows your returns</Heading>
-      <Lede>We build direct bookings systematically, without any extra effort from you.</Lede>
+      <Heading>{hasOffer ? "What happens next" : "How Stayful grows your returns"}</Heading>
+      <Lede>
+        {hasOffer
+          ? "A fixed rent every month. We take on the property, the guests and the costs."
+          : "We build direct bookings systematically, without any extra effort from you."}
+      </Lede>
 
       <View style={s.timeline}>
         <View style={s.dotRow}>
-          {STEPS.map((step, i) => (
+          {steps.map((step, i) => (
             <View key={step.n} style={s.dotCell}>
-              <View style={[s.dot, ...(i === STEPS.length - 1 ? [s.dotFilled] : [])]} />
-              {i < STEPS.length - 1 ? <View style={s.connector} /> : null}
+              <View style={[s.dot, ...(i === steps.length - 1 ? [s.dotFilled] : [])]} />
+              {i < steps.length - 1 ? <View style={s.connector} /> : null}
             </View>
           ))}
         </View>
         <View style={s.stepRow}>
-          {STEPS.map((step) => (
+          {steps.map((step) => (
             <View key={step.n} style={s.step}>
               <Text style={s.stepNum}>{step.n}</Text>
               <Text style={s.stepTitle}>{step.title}</Text>
@@ -234,33 +290,75 @@ export function Page6Plan({ data }: { data: PdfReportData }) {
         </View>
       </View>
 
-      <Text style={s.sectionLabel}>36-MONTH INCOME GROWTH PROJECTION</Text>
-      <View style={s.metricRow}>
-        <View style={s.metric}>
-          <Text style={s.metricValue}>{growth.directBookingPctMonth36}%</Text>
-          <Text style={s.metricName}>Direct bookings by month 36</Text>
-          <Text style={s.metricSub}>Platform fee removed on half your revenue</Text>
-        </View>
-        <View style={s.metric}>
-          <Text style={s.metricValue}>{growth.repeatCustomers}</Text>
-          <Text style={s.metricName}>Repeat customers</Text>
-          <Text style={s.metricSub}>Built organically over three years</Text>
-        </View>
-        <View style={s.metric}>
-          <Text style={s.metricValue}>{growth.platformFeeSavingsPct}%</Text>
-          <Text style={s.metricName}>Platform fee saved</Text>
-          <Text style={s.metricSub}>On every direct booking</Text>
-        </View>
-        <View style={s.metric}>
-          <Text style={s.metricValue}>{formatGbpSigned(growth.extraMonthlyProfitYr3)}</Text>
-          <Text style={s.metricName}>Extra monthly profit</Text>
-          <Text style={s.metricSub}>By year 3, above the year-1 baseline</Text>
-        </View>
-      </View>
+      {hasOffer ? (
+        <>
+          {/* Under a guaranteed rent the landlord's income is fixed, so the
+              growth projection this page carries for management leads would be
+              showing them income they will not receive. These are the terms of
+              the offer instead. */}
+          <Text style={s.sectionLabel}>YOUR GUARANTEED RENT</Text>
+          <View style={s.metricRow}>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{formatGbp(offerMonthly)}</Text>
+              <Text style={s.metricName}>Every month</Text>
+              <Text style={s.metricSub}>Booked or empty, the figure does not move</Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{formatGbp(offerAnnual)}</Text>
+              <Text style={s.metricName}>Across twelve months</Text>
+              <Text style={s.metricSub}>Before any costs, because there are none</Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>
+                {gr?.offerMeetsAsk ? formatGbp(askAnnual) : formatGbpSigned(offerVsAsk)}
+              </Text>
+              <Text style={s.metricName}>
+                {gr?.offerMeetsAsk ? "Your asking rent" : "Against your asking rent"}
+              </Text>
+              <Text style={s.metricSub}>
+                {gr?.offerMeetsAsk
+                  ? "Matched in full, with nothing deducted"
+                  : "The gap we should talk through on the call"}
+              </Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{formatGbp(0)}</Text>
+              <Text style={s.metricName}>Your costs</Text>
+              <Text style={s.metricSub}>Setup, cleaning, management and voids are ours</Text>
+            </View>
+          </View>
+        </>
+      ) : (
+        <>
+          <Text style={s.sectionLabel}>36-MONTH INCOME GROWTH PROJECTION</Text>
+          <View style={s.metricRow}>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{growth.directBookingPctMonth36}%</Text>
+              <Text style={s.metricName}>Direct bookings by month 36</Text>
+              <Text style={s.metricSub}>Platform fee removed on half your revenue</Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{growth.repeatCustomers}</Text>
+              <Text style={s.metricName}>Repeat customers</Text>
+              <Text style={s.metricSub}>Built organically over three years</Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{growth.platformFeeSavingsPct}%</Text>
+              <Text style={s.metricName}>Platform fee saved</Text>
+              <Text style={s.metricSub}>On every direct booking</Text>
+            </View>
+            <View style={s.metric}>
+              <Text style={s.metricValue}>{formatGbpSigned(growth.extraMonthlyProfitYr3)}</Text>
+              <Text style={s.metricName}>Extra monthly profit</Text>
+              <Text style={s.metricSub}>By year 3, above the year-1 baseline</Text>
+            </View>
+          </View>
+        </>
+      )}
 
       <Text style={s.sectionLabel}>STAYFUL HANDLES EVERYTHING</Text>
       <View style={s.handledGrid}>
-        {HANDLED.map((item) => (
+        {handled.map((item) => (
           <View key={item} style={s.handledItem}>
             <Check />
             <Text style={s.handledText}>{item}</Text>
@@ -289,8 +387,12 @@ export function Page6Plan({ data }: { data: PdfReportData }) {
         <View style={s.cta}>
           <View style={s.ctaLeft}>
             <Text style={s.ctaLabel}>NEXT STEP · FREE 30-MINUTE CALL</Text>
-            <Text style={s.ctaHead}>Book your Airbnb Profitability Action Plan</Text>
-            {CTA_POINTS.map((p) => (
+            <Text style={s.ctaHead}>
+              {hasOffer
+                ? `Confirm your guaranteed rent of ${formatGbp(offerMonthly)} a month`
+                : "Book your Airbnb Profitability Action Plan"}
+            </Text>
+            {(hasOffer ? GUARANTEED_CTA_POINTS : CTA_POINTS).map((p) => (
               <View key={p} style={s.ctaPoint}>
                 <Check color={C.ACCENT} />
                 <Text style={s.ctaPointText}>{p}</Text>
