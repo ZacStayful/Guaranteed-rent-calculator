@@ -24,7 +24,6 @@ import {
   Ticket,
   Heart,
   Star,
-  Phone,
   FileText,
   ChevronRight,
   ChevronDown,
@@ -103,28 +102,14 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-// Where every "book a call" prompt points. One constant so the call sites in
-// this file cannot drift apart again — and they all go through bookingUrlFor()
-// and trackBooking() below rather than using it directly.
-const BOOKING_URL = "https://calendly.com/zac-stayful/call";
+// NO CALL BOOKING IN THIS APP. Guaranteed rent leads must never be offered a
+// call: no Calendly link, no "book a call" button, no phone number, anywhere —
+// on screen or in the PDF. The landlord-management analyser has those; this
+// fork deliberately does not. Do not add them back.
 
 // Height of the sticky report header, used to offset in-page scrolling so a
-// section heading never lands underneath it. Kept next to BOOKING_URL because
-// the header only exists when a booking CTA does.
+// section heading never lands underneath it.
 const STICKY_HEADER_H = 60;
-
-// Every booking CTA goes through this: session tracker + Meta Pixel in one
-// place. "Schedule" is Meta's standard event for booking intent — keeping it
-// standard means it can be used directly as a campaign optimisation goal.
-// Without it the pixel only ever sees "ran an analysis", not "booked a call".
-type WithFbq = { fbq?: (...args: unknown[]) => void };
-
-function trackBooking(ctaId: string) {
-  trackCtaClick(ctaId);
-  if (typeof window !== "undefined") {
-    (window as unknown as WithFbq).fbq?.("track", "Schedule");
-  }
-}
 
 const MONTHS = [
   "Jan",
@@ -629,28 +614,6 @@ export default function HomePage() {
     }
   };
 
-  // Calendly prefill. The lead already gave us their email and we already know
-  // the property, so neither should have to be retyped — and answer 1 ("what
-  // have we been discussing") puts the figures in front of us before the call.
-  // a2/a3 are the guaranteed-rent and 6-month qualifiers: deliberately left
-  // blank, since pre-answering those on the lead's behalf defeats asking.
-  const bookingUrlFor = (r: AnalysisResult | null) => {
-    const params = new URLSearchParams();
-    if (email) params.set("email", email);
-    if (r) {
-      const rec = r.recommendation;
-      const where = `${r.property.address}, ${r.property.postcode}`;
-      params.set(
-        "a1",
-        rec
-          ? `${where} — short-let nets ~${gbp(Math.round(rec.trueSTRNet))}/yr vs ~${gbp(Math.round(rec.trueLLNet))}/yr on a managed long-let (+${Math.round(rec.upliftPct * 100)}%).`
-          : where,
-      );
-    }
-    const qs = params.toString();
-    return qs ? `${BOOKING_URL}?${qs}` : BOOKING_URL;
-  };
-
   const ANALYSIS_STAGES = [
     { key: "geocoding", label: "Locating property..." },
     { key: "short_let", label: "Fetching short-let data..." },
@@ -1055,8 +1018,7 @@ export default function HomePage() {
               {isShortLet ? (
                 <p className="max-w-md text-sm text-muted-foreground">
                   Based on your numbers, short-letting this property looks like the
-                  stronger option. Book a quick call and we&apos;ll walk you through
-                  exactly how to get started.
+                  stronger option. The full breakdown below shows how we got there.
                 </p>
               ) : (
                 <p className="max-w-md text-sm text-muted-foreground">
@@ -1065,23 +1027,9 @@ export default function HomePage() {
                 </p>
               )}
 
-              {/* Booking is the primary action here, not a co-equal second
-                  option — this screen only renders when short-let wins. */}
               <div className="flex w-full flex-col items-center gap-2">
                 <Button
                   size="lg"
-                  className="w-full"
-                  onClick={() => {
-                    trackBooking("book_call");
-                    window.open(bookingUrlFor(result), "_blank");
-                  }}
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  Book a call
-                </Button>
-
-                <Button
-                  variant="ghost"
                   className="w-full"
                   onClick={() => setShowBreakdown(true)}
                 >
@@ -1092,8 +1040,8 @@ export default function HomePage() {
 
               {isEstimatedLongLet && (
                 <p className="max-w-md text-xs text-muted-foreground">
-                  Long-let comparison based on an estimated market rent. Tell us
-                  the actual figure on a call for a precise decision.
+                  Long-let comparison based on an estimated market rent, not your
+                  actual figure.
                 </p>
               )}
             </CardContent>
@@ -1116,9 +1064,9 @@ export default function HomePage() {
     const v = r.verdict;
     const risk = r.risk;
 
-    // Only offer a call when short-let is still on the table. A missing
-    // recommendation (no long-let figure, demo mode) counts as eligible.
-    const showBooking = r.recommendation?.recommendation !== "LONG_LET";
+    // Sticky report header for everyone except long-let leads (matches
+    // hasStickyHeader, which the in-page scroll offset relies on).
+    const stickyHeader = r.recommendation?.recommendation !== "LONG_LET";
 
     // Monthly chart data
     const chartData = MONTHS.map((month, i) => ({
@@ -1529,19 +1477,6 @@ export default function HomePage() {
             })}
           </nav>
 
-          {/* Calendly CTA — short-let leads only */}
-          {showBooking && !sidebarCollapsed && (
-            <div className="px-4 pb-2.5">
-              <button
-                type="button"
-                onClick={() => { trackBooking("sidebar_book_call"); window.open(bookingUrlFor(r), "_blank"); }}
-                style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: 12, fontWeight: 600, width: "100%", padding: "10px 0", borderRadius: 8, marginBottom: 10, border: "none", cursor: "pointer" }}
-              >
-                Book your action plan
-              </button>
-            </div>
-          )}
-
           {/* Progress at bottom */}
           <div className={`border-t border-border ${sidebarCollapsed ? "px-2 py-3" : "px-4 py-3"}`}>
             {!sidebarCollapsed && (
@@ -1568,31 +1503,16 @@ export default function HomePage() {
           className="transition-all duration-300"
           style={{ marginLeft: sidebarWidth }}
         >
-          {/* Top header with action buttons. Sticky, with a booking CTA, only
-              for leads short-let is recommended for — the sidebar CTA vanishes
-              when the sidebar is collapsed, leaving them nothing to click on a
-              long scroll. Long-let leads keep the plain, non-sticky bar.
-              z-30 sits under the z-40 sidebar so it stays on top. */}
+          {/* Top header with action buttons. Sticky except for long-let leads,
+              who keep the plain bar. z-30 sits under the z-40 sidebar. */}
           <div
             ref={reportHeaderRef}
             className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border sm:px-6 ${
-              showBooking
+              stickyHeader
                 ? "sticky top-0 z-30 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
                 : "bg-card/50"
             }`}
           >
-            {showBooking && (
-              <Button
-                size="sm"
-                onClick={() => {
-                  trackBooking("sticky_header_book_call");
-                  window.open(bookingUrlFor(r), "_blank");
-                }}
-              >
-                <Calendar className="mr-2 h-4 w-4" />
-                Book a call
-              </Button>
-            )}
             <div className="ml-auto flex items-center gap-2">
               {/* Only short-let leads have a recommendation screen to go back to. */}
               {r.recommendation?.recommendation === "SHORT_LET" && (
@@ -1701,18 +1621,9 @@ export default function HomePage() {
                       </p>
                       <p className="mt-2 max-w-2xl text-sm text-primary-foreground/80">
                         {gr.band === "INSUFFICIENT_DATA"
-                          ? "We couldn't get enough short-let data for this property to price it properly. The figures below are our best estimate — talk to us and we'll look at it by hand."
-                          : "On these numbers the short-let income wouldn't cover a guaranteed rent on top of running costs. Your income potential as a short-term let is below, and it's worth a conversation either way."}
+                          ? "We couldn't get enough short-let data for this property to price it properly. The figures below are our best estimate."
+                          : "On these numbers the short-let income wouldn't cover a guaranteed rent on top of running costs. Your income potential as a short-term let is below."}
                       </p>
-                      <Button
-                        className="mt-4 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
-                        onClick={() => {
-                          trackBooking("offer_no_offer_book_call");
-                          window.open(bookingUrlFor(r), "_blank");
-                        }}
-                      >
-                        Talk it through with us
-                      </Button>
                     </div>
                   );
                 }
@@ -1736,22 +1647,7 @@ export default function HomePage() {
                         <p className="mt-3 max-w-xl text-sm text-primary-foreground/90">
                           {gr.offerMeetsAsk
                             ? `That matches the ${gbp(ask)} a month you asked for.`
-                            : `You asked for ${gbp(ask)} a month. ${gbp(offer)} is the most we can guarantee on this property — worth a conversation.`}
-                        </p>
-                      </div>
-                      <div className="shrink-0">
-                        <Button
-                          size="lg"
-                          className="w-full bg-primary-foreground text-primary hover:bg-primary-foreground/90 lg:w-auto"
-                          onClick={() => {
-                            trackBooking("offer_book_call");
-                            window.open(bookingUrlFor(r), "_blank");
-                          }}
-                        >
-                          {gr.offerMeetsAsk ? "Confirm this rent" : "Discuss this offer"}
-                        </Button>
-                        <p className="mt-2 text-center text-[11px] text-primary-foreground/70 lg:text-right">
-                          Free 30-minute call
+                            : `You asked for ${gbp(ask)} a month. ${gbp(offer)} is the most we can guarantee on this property.`}
                         </p>
                       </div>
                     </div>
@@ -2089,9 +1985,7 @@ export default function HomePage() {
                 <div className="text-center">
                   <p className="text-sm text-primary-foreground/80">Limited market data available</p>
                   <p className="text-xs text-primary-foreground/60 mt-1">
-                    {showBooking
-                      ? "Book a call with Stayful for a personalised estimate"
-                      : "Figures for this area are based on a limited sample"}
+                    Figures for this area are based on a limited sample
                   </p>
                 </div>
               )}
@@ -2111,27 +2005,6 @@ export default function HomePage() {
               <AccuracyPanel />
             </div>
 
-            {/* Calendly CTA banner — short-let leads only */}
-            {showBooking && (
-            <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 rounded-xl bg-primary p-6 sm:p-7">
-              <div>
-                <p className="text-base font-semibold text-primary-foreground" style={{ marginBottom: 6 }}>
-                  Book your profitability action plan
-                </p>
-                <p className="text-[13px] text-primary-foreground/60">
-                  A free consultation to review the risks in your property and analyse your realistic profitability.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => { trackBooking("overview_book_call"); window.open(bookingUrlFor(r), "_blank"); }}
-                className="shrink-0 whitespace-nowrap rounded-lg px-5 py-3 text-[13px] font-bold text-primary"
-                style={{ background: "#B9D5C6", border: "none", cursor: "pointer" }}
-              >
-                Book your plan →
-              </button>
-            </div>
-            )}
           </section>
 
           {/* ══════════════════════════════════════════════════════════
@@ -2154,13 +2027,6 @@ export default function HomePage() {
                   {r.dataQuality.level === "low" ? "Limited Data Available" : "Data Note"}
                 </p>
                 <p className="text-xs">{r.dataQuality.disclaimer}</p>
-                {showBooking && r.dataQuality.level === "low" && (
-                  <a href={bookingUrlFor(r)} target="_blank" rel="noopener noreferrer"
-                    className="mt-2 inline-block text-xs font-medium text-primary underline"
-                    onClick={() => trackBooking("book_call")}>
-                    Book your profitability action plan
-                  </a>
-                )}
               </div>
             )}
 
@@ -2537,22 +2403,6 @@ export default function HomePage() {
                           <>Limited short-term rental data available near <span className="font-medium text-foreground">{r.property.postcode}</span>. This may be a rural or unique area with low competition, which can be advantageous for short-term letting.</>
                         )}
                       </p>
-                      <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
-                        For individual comparable listings with direct Airbnb links, contact Stayful for a comprehensive property assessment.
-                      </p>
-                      {showBooking && (
-                        <a
-                          href={bookingUrlFor(r)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                          onClick={() => trackBooking("book_call")}
-                        >
-                          <Phone className="h-3 w-3" />
-                          Book your profitability action plan
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -3360,7 +3210,7 @@ export default function HomePage() {
                   short: "Stayful operates across the UK. Your postcode is within our active coverage area.",
                   answer: (
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      Stayful manages properties across all major UK cities, towns and coastal areas. The fact that this analysis has been run for your postcode confirms it sits within our active service area. Book your profitability action plan to confirm availability and discuss your specific property.
+                      Stayful manages properties across all major UK cities, towns and coastal areas. The fact that this analysis has been run for your postcode confirms it sits within our active service area.
                     </p>
                   ),
                 },
@@ -3666,37 +3516,6 @@ export default function HomePage() {
               </Card>
             </div>
 
-            {/* CTA Card — only offer a call when short-let is the recommendation.
-                Long-let leads get the figures and nothing else: no booking
-                prompt, and no verdict message either. */}
-            {showBooking && (
-              <Card className="bg-primary text-primary-foreground">
-                <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-                  <h2 className="text-2xl font-bold">Ready to maximise your rental income?</h2>
-                  <p className="max-w-lg text-sm text-primary-foreground/80">
-                    Let Stayful handle the hard work while you earn more from your
-                    property. Book your profitability action plan to get started.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-primary-foreground/80">
-                      <Phone className="h-4 w-4" />
-                      <span>07471 321 997</span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="lg"
-                      onClick={() => {
-                        trackBooking("book_call");
-                        window.open(bookingUrlFor(r), "_blank");
-                      }}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Book a Free Consultation
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </section>
 
           </div>

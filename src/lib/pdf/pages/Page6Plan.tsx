@@ -1,9 +1,5 @@
-/* eslint-disable jsx-a11y/alt-text --
- * `Image` here is @react-pdf/renderer's PDF drawing primitive, not an <img>.
- * It has no `alt` prop, and a PDF has no accessibility tree for one to land in.
- */
 import React from "react";
-import { View, Text, Image, Link, StyleSheet } from "@react-pdf/renderer";
+import { View, Text, Link, StyleSheet } from "@react-pdf/renderer";
 import {
   PDF_COLORS as C,
   PDF_LAYOUT as L,
@@ -11,15 +7,14 @@ import {
   fontFamily,
 } from "../theme";
 import { ReportPage, Eyebrow, Heading, Lede, Check } from "../components/Primitives";
-import { QR_PATH } from "../components/Chrome";
 import { formatGbp, formatGbpSigned } from "../components/format";
 import type { PdfReportData } from "../derive";
 
 const mono = fontFamily("MONO");
 const sans = fontFamily("SANS");
 
-const BOOKING_URL = "https://calendly.com/zac-stayful/call";
-const BOOKING_LABEL = "calendly.com/zac-stayful/call";
+// No call booking in this report: no Calendly link, no QR code, no phone number.
+// Guaranteed rent leads are never offered a call. Do not add one back.
 
 const STEPS = [
   {
@@ -50,13 +45,6 @@ const HANDLED = [
   "Cleaning coordination",
   "Pricing optimisation",
   "Direct booking growth",
-] as const;
-
-const CTA_POINTS = [
-  "How we get direct bookings for your property",
-  "How we rank in the top 20% of listings on the platforms",
-  "How we protect your property from guests",
-  "What our service looks like from your side",
 ] as const;
 
 // ── Guaranteed-rent variants ──
@@ -92,13 +80,6 @@ const GUARANTEED_HANDLED = [
   "Guest management",
   "Cleaning coordination",
   "Listing and pricing",
-] as const;
-
-const GUARANTEED_CTA_POINTS = [
-  "The term, the notice period and how the agreement works",
-  "When your first payment lands and how it is paid",
-  "How we look after the property and handle guests",
-  "What happens at the end of the term",
 ] as const;
 
 const s = StyleSheet.create({
@@ -191,8 +172,6 @@ const s = StyleSheet.create({
     marginTop: "auto",
   },
   ctaLeft: { flex: 1.5, paddingRight: 16 },
-  ctaDivider: { width: L.hairline, backgroundColor: C.ON_DARK_MUTED, opacity: 0.4 },
-  ctaRight: { flex: 1, paddingLeft: 16, alignItems: "center" },
   ctaLabel: {
     fontFamily: mono,
     fontSize: T.label,
@@ -209,34 +188,9 @@ const s = StyleSheet.create({
     lineHeight: 1.2,
     marginBottom: 10,
   },
-  ctaPoint: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
-  ctaPointText: { fontSize: T.body, color: C.ON_DARK_MUTED, flex: 1, lineHeight: 1.4 },
   ctaBody: { fontSize: T.body, color: C.ON_DARK_MUTED, lineHeight: 1.4 },
   ctaActions: { flexDirection: "row", alignItems: "center", marginTop: 8 },
-  ctaButton: {
-    backgroundColor: C.ACCENT,
-    borderRadius: L.radius,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 12,
-  },
-  ctaButtonText: { fontFamily: sans, fontWeight: 700, fontSize: T.body, color: C.INK },
   ctaEmail: { fontSize: T.body, color: C.ON_DARK, textDecoration: "underline" },
-  qr: { width: 86, height: 86, borderRadius: 2 },
-  qrCaption: {
-    fontFamily: mono,
-    fontSize: T.micro,
-    letterSpacing: 0.8,
-    color: C.ON_DARK_MUTED,
-    marginTop: 8,
-    marginBottom: 3,
-  },
-  qrLink: {
-    fontSize: T.micro,
-    color: C.ACCENT,
-    textAlign: "center",
-    textDecoration: "underline",
-  },
 });
 
 /**
@@ -386,36 +340,21 @@ export function Page6Plan({ data }: { data: PdfReportData }) {
       ) : (
         <View style={s.cta}>
           <View style={s.ctaLeft}>
-            <Text style={s.ctaLabel}>NEXT STEP · FREE 30-MINUTE CALL</Text>
+            <Text style={s.ctaLabel}>NEXT STEP</Text>
             <Text style={s.ctaHead}>
               {hasOffer
-                ? `Confirm your guaranteed rent of ${formatGbp(offerMonthly)} a month`
-                : "Book your Airbnb Profitability Action Plan"}
+                ? `Your guaranteed rent: ${formatGbp(offerMonthly)} a month`
+                : "Your short-let income potential"}
             </Text>
-            {(hasOffer ? GUARANTEED_CTA_POINTS : CTA_POINTS).map((p) => (
-              <View key={p} style={s.ctaPoint}>
-                <Check color={C.ACCENT} />
-                <Text style={s.ctaPointText}>{p}</Text>
-              </View>
-            ))}
+            <Text style={s.ctaBody}>
+              We have your details and this report. We&apos;ll be in touch by email about
+              next steps. Any questions in the meantime, email us.
+            </Text>
             <View style={s.ctaActions}>
-              <Link src={BOOKING_URL} style={s.ctaButton}>
-                <Text style={s.ctaButtonText}>Book your call  →</Text>
-              </Link>
               <Link src="mailto:info@stayful.co.uk" style={s.ctaEmail}>
                 info@stayful.co.uk
               </Link>
             </View>
-          </View>
-
-          <View style={s.ctaDivider} />
-
-          <View style={s.ctaRight}>
-            <Image src={QR_PATH} style={s.qr} />
-            <Text style={s.qrCaption}>SCAN TO BOOK</Text>
-            <Link src={BOOKING_URL} style={s.qrLink}>
-              {BOOKING_LABEL}
-            </Link>
           </View>
         </View>
       )}
