@@ -58,6 +58,7 @@ overflowing content onto a new page, so a seventh page is a layout regression.
 ## Other docs
 
 - [docs/GUARANTEED_RENT.md](docs/GUARANTEED_RENT.md) — the deal model and the CRM writes
+- [docs/LINK_PARAMETERS.md](docs/LINK_PARAMETERS.md): pre-filling the form from a link, where each lead came from, and test leads
 - [docs/BULK_UPLOAD.md](docs/BULK_UPLOAD.md) — screening a spreadsheet of leads in one run
 - [docs/INTERNAL_ANALYSE.md](docs/INTERNAL_ANALYSE.md) — the `/api/internal/analyse` contract
 - [AGENTS.md](AGENTS.md) — this is Next.js 16; check `node_modules/next/dist/docs/` before assuming an API

@@ -86,6 +86,13 @@ import { MARGIN_THRESHOLD, LL_AGENT_FEE, FIXED_BILLS_MONTHLY, FIXED_SOFTWARE_MON
 import { DEMO_MAP } from "@/lib/demo-data";
 import { initTracker, endSession, trackCtaClick } from "@/lib/tracker";
 import {
+  isTestEmail,
+  keepAttributionForVisit,
+  readAttribution,
+  readPrefill,
+  type Attribution,
+} from "@/lib/linkParams";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -110,6 +117,21 @@ import {
 // Height of the sticky report header, used to offset in-page scrolling so a
 // section heading never lands underneath it.
 const STICKY_HEADER_H = 60;
+
+// Conversion events for a completed analysis: Meta's standard "Lead" and, once
+// Google Analytics is on the page (batch 4 adds it, with consent), its
+// "generate_lead". Called only where a run completes, so each fires once per
+// analysis. Test emails fire nothing, so test runs never train the ads. The
+// eventID lets Meta de-duplicate if a server-side copy is ever sent too.
+type WithFbq = { fbq?: (...args: unknown[]) => void };
+type WithGtag = { gtag?: (...args: unknown[]) => void };
+
+function trackAnalysisComplete(email: string) {
+  if (typeof window === "undefined" || isTestEmail(email)) return;
+  const eventID = `analysis-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  (window as unknown as WithFbq).fbq?.("track", "Lead", { content_name: "Guaranteed rent calculator" }, { eventID });
+  (window as unknown as WithGtag).gtag?.("event", "generate_lead", { calculator: "guaranteed_rent" });
+}
 
 const MONTHS = [
   "Jan",
@@ -459,6 +481,10 @@ export default function HomePage() {
   const [entryMode, setEntryMode] = useState<"auto" | "manual">("auto");
   const [selectedAutoAddress, setSelectedAutoAddress] = useState<{ address: string; postcode: string } | null>(null);
 
+  // Where this visitor came from (UTM tags and the stayful.co.uk page), read
+  // from the link on load and sent with the analysis so it reaches Monday.
+  const attributionRef = useRef<Attribution | null>(null);
+
   // User-adjustable expense formula. null means "use default".
   //   Platform default: 15 %
   //   Management default: 15 %
@@ -591,6 +617,33 @@ export default function HomePage() {
     }
   }, []);
 
+  // Pre-fill from the link: the website forms send visitors here with the
+  // details they already gave, so they never type them twice. Never submits;
+  // the visitor checks the details and presses the button. A demo link
+  // pre-fills nothing. Parameters: docs/LINK_PARAMETERS.md.
+  useEffect(() => {
+    const search = window.location.search;
+    attributionRef.current = keepAttributionForVisit(readAttribution(search));
+
+    const prefill = readPrefill(search);
+    if (prefill.email) setEmail(prefill.email);
+    if (prefill.bedrooms !== undefined) setBedrooms(String(prefill.bedrooms));
+    if (prefill.bathrooms !== undefined) setBathrooms(String(prefill.bathrooms));
+    if (prefill.propertyType) setPropertyType(prefill.propertyType);
+    if (prefill.desiredRent !== undefined) setDesiredRentMonthly(String(prefill.desiredRent));
+    if (prefill.address && prefill.postcode) {
+      // Both parts: show the address as already picked, with its Change button.
+      setAddress(prefill.address);
+      setPostcode(prefill.postcode);
+      setSelectedAutoAddress({ address: prefill.address, postcode: prefill.postcode });
+    } else if (prefill.address || prefill.postcode) {
+      // Only one part: open the manual fields so the visitor can add the other.
+      setAddress(prefill.address ?? "");
+      setPostcode(prefill.postcode ?? "");
+      setEntryMode("manual");
+    }
+  }, []);
+
   // Session analytics tracker
   useEffect(() => {
     if (result) {
@@ -652,6 +705,7 @@ export default function HomePage() {
       ...(!longLetNotSure && longLetMonthly !== "" && { longLetMonthly: Number(longLetMonthly) }),
           ...(monthlyMortgage !== "" && { monthlyMortgage: Number(monthlyMortgage) }),
           ...(monthlyBills !== "" && { monthlyBills: Number(monthlyBills) }),
+          ...(attributionRef.current && { attribution: attributionRef.current }),
         }),
       });
 
@@ -728,9 +782,7 @@ export default function HomePage() {
               }
 
               if (event.stage === "complete" && event.data) {
-                if (typeof window !== "undefined" && (window as any).fbq) {
-                  (window as any).fbq("track", "Lead");
-                }
+                trackAnalysisComplete(email);
                 setResult(event.data as AnalysisResult);
                 setLoading(false);
                 return;
@@ -3929,6 +3981,11 @@ export default function HomePage() {
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                   />
+                  {isTestEmail(email) && (
+                    <p className="text-xs text-muted-foreground">
+                      Test email: this run will not be saved to Monday.
+                    </p>
+                  )}
                 </div>
 
                 {error && (

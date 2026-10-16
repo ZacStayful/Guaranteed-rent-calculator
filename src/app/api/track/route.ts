@@ -2,6 +2,8 @@
 // Receives session analytics data from the client-side tracker.
 // Currently logs to console. Will push to Monday.com when configured.
 
+import { isTestLead } from "@/lib/linkParams";
+
 const sessions: Record<string, unknown>[] = [];
 
 export async function POST(request: Request) {
@@ -26,8 +28,9 @@ export async function POST(request: Request) {
       sessions.shift();
     }
 
-    // Push time-on-site to Monday CRM (silent, fire-and-forget)
-    if (data.type === 'time_on_site' && data.email && data.seconds > 0) {
+    // Push time-on-site to Monday CRM (silent, fire-and-forget). Test leads
+    // never reach Monday (docs/LINK_PARAMETERS.md).
+    if (data.type === 'time_on_site' && data.email && data.seconds > 0 && !isTestLead(data.email)) {
       const { syncTimeOnSiteToMonday } = await import('@/lib/apis/monday');
       void syncTimeOnSiteToMonday(data.email, data.seconds);
     }

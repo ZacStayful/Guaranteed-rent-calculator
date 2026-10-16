@@ -24,6 +24,7 @@ import {
   type LeadRef,
 } from "./lead-match.ts";
 import { normaliseUkPhone, ukPhoneSearchVariants } from "../utils/phone.ts";
+import type { Attribution, AttributionKey } from "../linkParams.ts";
 
 const MONDAY_API_URL = "https://api.monday.com/v2";
 const MONDAY_API_VERSION = "2024-10";
@@ -53,6 +54,15 @@ const DEFAULTS = {
   desiredRentColumnId: "text_mkztg3z9",     // "Desired rent" — what the landlord asked for
   rentOfferedColumnId: "text_mkzxkfns",     // "Rent offered" — what we can pay
   profitColumnId: "text_mkztftwn",          // "Profit after guaranteed rent" — monthly
+  // Lead source columns (text), added 2026-10-16. Written by
+  // syncAttributionToMonday, only into empty cells, so the first source is kept.
+  // The website forms write the same columns.
+  sourcePageColumnId: "text_mm86x9r1",      // "Source page" — the stayful.co.uk page
+  utmSourceColumnId: "text_mm86hvgw",       // "UTM source"
+  utmMediumColumnId: "text_mm86dwx6",       // "UTM medium"
+  utmCampaignColumnId: "text_mm86a00f",     // "UTM campaign"
+  utmContentColumnId: "text_mm8632zb",      // "UTM content"
+  utmTermColumnId: "text_mm86s50c",         // "UTM term"
 };
 
 // Which Status label each band maps to.
@@ -99,6 +109,12 @@ function envConfig() {
     desiredRentColumnId: process.env.MONDAY_DESIRED_RENT_COLUMN_ID || DEFAULTS.desiredRentColumnId,
     rentOfferedColumnId: process.env.MONDAY_RENT_OFFERED_COLUMN_ID || DEFAULTS.rentOfferedColumnId,
     profitColumnId: process.env.MONDAY_PROFIT_COLUMN_ID || DEFAULTS.profitColumnId,
+    sourcePageColumnId: process.env.MONDAY_SOURCE_PAGE_COLUMN_ID || DEFAULTS.sourcePageColumnId,
+    utmSourceColumnId: process.env.MONDAY_UTM_SOURCE_COLUMN_ID || DEFAULTS.utmSourceColumnId,
+    utmMediumColumnId: process.env.MONDAY_UTM_MEDIUM_COLUMN_ID || DEFAULTS.utmMediumColumnId,
+    utmCampaignColumnId: process.env.MONDAY_UTM_CAMPAIGN_COLUMN_ID || DEFAULTS.utmCampaignColumnId,
+    utmContentColumnId: process.env.MONDAY_UTM_CONTENT_COLUMN_ID || DEFAULTS.utmContentColumnId,
+    utmTermColumnId: process.env.MONDAY_UTM_TERM_COLUMN_ID || DEFAULTS.utmTermColumnId,
   };
 }
 
@@ -610,6 +626,65 @@ export async function syncAnalysisToMonday(
   } else {
     console.error(`[Monday] Column update failed for ${email} (item ${itemId})`);
   }
+}
+
+// Which column holds each lead source field.
+const ATTRIBUTION_COLUMNS: ReadonlyArray<[AttributionKey, keyof Cfg]> = [
+  ["from", "sourcePageColumnId"],
+  ["utm_source", "utmSourceColumnId"],
+  ["utm_medium", "utmMediumColumnId"],
+  ["utm_campaign", "utmCampaignColumnId"],
+  ["utm_content", "utmContentColumnId"],
+  ["utm_term", "utmTermColumnId"],
+];
+
+/**
+ * Writes where the lead came from (the stayful.co.uk page and the link's UTM
+ * tags) onto the lead's item. Only empty cells are filled, so the first source
+ * a lead arrived from is kept: the website form that created the lead, or an
+ * earlier calculator visit, is never overwritten by a later link. The existing
+ * "Lead source" column belongs to the workflow that creates the item and is
+ * left alone.
+ *
+ * Its own write, separate from syncAnalysisToMonday, so a problem with these
+ * columns can never fail the figures. If the current values cannot be read,
+ * nothing is written rather than risk overwriting. Fails silently (logs only).
+ */
+export async function syncAttributionToMonday(
+  itemId: string,
+  attribution: Attribution,
+): Promise<boolean> {
+  const cfg = envConfig();
+  if (!cfg) return false;
+
+  const wanted: Record<string, string> = {};
+  for (const [field, columnKey] of ATTRIBUTION_COLUMNS) {
+    const columnId = cfg[columnKey];
+    const value = attribution[field];
+    if (columnId && value) wanted[columnId] = value;
+  }
+  if (!Object.keys(wanted).length) return false;
+
+  const current = await readItemColumns(cfg, itemId, Object.keys(wanted));
+  if (!current) {
+    console.error(`[Monday] Lead source not written: could not read item ${itemId}`);
+    return false;
+  }
+  for (const columnId of Object.keys(wanted)) {
+    if ((current[columnId] ?? "").trim()) delete wanted[columnId];
+  }
+  if (!Object.keys(wanted).length) {
+    console.log(`[Monday] Lead source already set on item ${itemId}; kept as is`);
+    return true;
+  }
+
+  const ok = await updateItemColumns(cfg.token, cfg.boardId, itemId, wanted);
+  if (ok) {
+    console.log(`[Monday] Lead source written to item ${itemId}: ${Object.keys(wanted).length} column(s)`);
+  } else {
+    console.error(`[Monday] Lead source write failed for item ${itemId}`);
+  }
+  return ok;
 }
 
 /**
