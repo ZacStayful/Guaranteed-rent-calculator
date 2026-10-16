@@ -1,6 +1,7 @@
 import { isUnlimited, FREE_ANALYSIS_LIMIT, PAYMENT_URL } from '@/lib/usage';
 import { normaliseAnalysisInput } from '@/lib/pipeline/input';
 import { runAnalysis } from '@/lib/pipeline/runAnalysis';
+import { isTestLead, sanitiseAttribution } from '@/lib/linkParams';
 
 // This route renders the PDF with @react-pdf/renderer, which needs the Node
 // runtime (not Edge).
@@ -89,6 +90,12 @@ export async function POST(request: Request) {
   const emailStr = typeof body.email === 'string' && body.email.includes('@')
     ? (body.email as string).trim()
     : null;
+  // Test leads (an @test.stayful.co.uk email, or CALCULATOR_TEST_MODE=1) run
+  // the full analysis but never touch Monday or the stored reports, and are
+  // not counted against the free-analysis limit. See docs/LINK_PARAMETERS.md.
+  const testLead = isTestLead(emailStr);
+  // Where the lead came from, re-checked here: the browser's copy is untrusted.
+  const attribution = sanitiseAttribution(body.attribution);
 
   // ─── Usage gate ────────────────────────────────────────────────
   // Cap free analyses at FREE_ANALYSIS_LIMIT per EMAIL (owner exempt), then
@@ -99,7 +106,7 @@ export async function POST(request: Request) {
   // it's keyed by email — never the device — so it can't over-block a shared
   // browser. Fails open: an email that isn't a known lead, or any CRM error,
   // is allowed through, so genuine new users are never wrongly gated.
-  if (emailStr && !isUnlimited(emailStr)) {
+  if (emailStr && !isUnlimited(emailStr) && !testLead) {
     let useCount = 0;
     try {
       const { getAnalyserUseCount } = await import('@/lib/apis/monday');
@@ -138,6 +145,8 @@ export async function POST(request: Request) {
         // after the 'complete' event. It never throws.
         await runAnalysis(normalised.input, {
           onProgress: (event) => send({ ...event }),
+          attribution,
+          testLead,
         });
       } catch (err) {
         console.error('Unexpected error in /api/analyse:', err);

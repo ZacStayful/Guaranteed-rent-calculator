@@ -14,6 +14,7 @@ import { getSupabase } from '../supabase.ts';
 import { extractPostcodeArea } from '../utils/postcode.ts';
 import { isUnlimited } from '../usage.ts';
 import { marketSignals } from './marketSignals.ts';
+import type { Attribution } from '../linkParams.ts';
 
 /**
  * A veto on the CRM write, evaluated after the analysis but before anything is
@@ -70,6 +71,10 @@ export interface PersistOptions {
   mondayItemId?: string | null;
   gate?: SideEffectGate;
   renderLock?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /** Where the lead came from; written to the lead's empty source columns. */
+  attribution?: Attribution | null;
+  /** A test lead (docs/LINK_PARAMETERS.md): nothing is stored or sent to Monday. */
+  testLead?: boolean;
 }
 
 export interface SideEffectOutcome {
@@ -91,6 +96,15 @@ export async function persistAndSync(
     mondaySynced: false,
     pdfUploaded: false,
   };
+
+  // Test leads stop here: no stored report (it would skew the Market Explorer
+  // figures) and no Monday writes, so a test run can never reach the real
+  // boards. The analysis itself already ran and was shown in full.
+  if (opts.testLead) {
+    console.log('[test lead] Report save and Monday sync skipped');
+    outcome.sideEffectsSkippedReason = 'test lead';
+    return outcome;
+  }
 
   // Derive the report figures once, up front: the storage insert below
   // and the PDF generation in the Monday block (further down) both need
@@ -181,8 +195,10 @@ export async function persistAndSync(
   if (!hasSignal) return outcome;
 
   try {
-    const { syncAnalysisToMonday, uploadPdfToMonday, incrementAnalyserUseCount, resolveLeadItemId } =
-      await import('../apis/monday');
+    const {
+      syncAnalysisToMonday, uploadPdfToMonday, incrementAnalyserUseCount, resolveLeadItemId,
+      syncAttributionToMonday,
+    } = await import('../apis/monday');
 
     // Resolve the lead ONCE. Previously syncAnalysisToMonday and
     // uploadPdfToMonday each searched independently, which cost two lookups
@@ -238,6 +254,11 @@ export async function persistAndSync(
             await uploadPdfToMonday(emailStr, buffer, filename, property, itemId);
             return true;
           })()
+        : Promise.resolve(false),
+      // Lead source: its own write, so a problem with these columns can never
+      // fail the figures above (Monday applies a multi-column write all or nothing).
+      itemId && opts.attribution
+        ? syncAttributionToMonday(itemId, opts.attribution)
         : Promise.resolve(false),
     ]);
 
