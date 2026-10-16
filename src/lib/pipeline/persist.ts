@@ -219,6 +219,12 @@ export async function persistAndSync(
       }, resolveLeadItemId);
     outcome.mondayItemId = itemId;
 
+    // No lead to attach the figures to. Say so in the logs, with the postcode
+    // only (never the email or name), so a lead that missed Monday can be traced.
+    if (!itemId) {
+      console.warn(`[Monday] No Monday lead found (postcode ${result.property.postcode || 'unknown'}): figures, PDF and source not attached`);
+    }
+
     const property = {
       address: result.property.address,
       postcode: result.property.postcode,
