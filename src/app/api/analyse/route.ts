@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       console.error('[Usage gate] Monday use-count check failed (allowing):', err);
     }
     if (useCount >= FREE_ANALYSIS_LIMIT) {
-      console.log(`[Usage gate] Blocking ${emailStr}: ${useCount} use(s) ≥ limit ${FREE_ANALYSIS_LIMIT}`);
+      console.log(`[Usage gate] Blocking a lead: ${useCount} use(s) ≥ limit ${FREE_ANALYSIS_LIMIT}`);
       return Response.json(
         {
           error: `You've used your ${FREE_ANALYSIS_LIMIT} free analyses. To keep using the analyser, continue at ${PAYMENT_URL}.`,

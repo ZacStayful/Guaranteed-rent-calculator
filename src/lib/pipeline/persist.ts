@@ -59,7 +59,7 @@ async function resolveLeadWithRetry(
       return itemId;
     }
   }
-  console.warn(`[Monday] Lead never appeared for ${signals.email} — report not attached`);
+  console.warn(`[Monday] Lead never appeared (postcode ${signals.postcode || 'unknown'}) — report not attached`);
   return null;
 }
 
@@ -222,7 +222,7 @@ export async function persistAndSync(
     // No lead to attach the figures to. Say so in the logs, with the postcode
     // only (never the email or name), so a lead that missed Monday can be traced.
     if (!itemId) {
-      console.warn(`[Monday] No Monday lead found (postcode ${result.property.postcode || 'unknown'}): figures, PDF and source not attached`);
+      console.warn(`[Monday] No Monday lead found on Guaranteed rent leads (postcode ${result.property.postcode || 'unknown'}): figures, PDF and source not attached`);
     }
 
     const property = {
