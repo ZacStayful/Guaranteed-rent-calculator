@@ -85,5 +85,9 @@ To make **every** run of the form a test run on a deployment (for example Vercel
 does not know about it, so use a test email as well if you also want the pixel to stay quiet. The admin bulk upload
 is not affected (it has its own `MONDAY_DRY_RUN`).
 
+**Vercel previews are in test mode (Zac, 2026-10-16):** the Preview environment has `CALCULATOR_TEST_MODE=1` and
+`MONDAY_DRY_RUN=1`, so a test copy never writes to Monday, whatever email is used and whichever branch it is built
+from (with `MONDAY_DRY_RUN`, column writes and PDF uploads only log). The live site has neither.
+
 When Resend sign-ups are added to the calculator (build plan batch 3), they must skip test emails too
 (`isTestLead` in `src/lib/linkParams.ts`).
