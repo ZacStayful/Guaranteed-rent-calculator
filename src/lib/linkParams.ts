@@ -223,6 +223,47 @@ export function keepAttributionForVisit(fromLink: Attribution | null): Attributi
   }
 }
 
+// ── Keeping the visitor's details out of the address bar ──────────
+//
+// The Meta pixel sends the page's full address to Meta, so a link's email,
+// address and postcode must leave the address bar before the pixel starts
+// (website build plan, wave 2 review, Fix first 1; Zac 2026-10-22).
+// PREFILL_GUARD_SCRIPT does that before anything else runs (src/app/layout.tsx
+// runs it as a beforeInteractive script and again at the top of the pixel's
+// own script, so their order never matters) and keeps the link's query for the
+// page, which reads it with prefillSearch(). A reload of the cleaned address
+// finds it again; any other page drops it.
+
+/** The link fields that are personal details: never left in the address bar. */
+export const PRIVATE_LINK_KEYS = ['email', 'address', 'postcode'] as const;
+const PREFILL_STORAGE_KEY = 'stayful_prefill';
+
+/** Plain browser JavaScript, inlined into the page. Running it twice is harmless. */
+export const PREFILL_GUARD_SCRIPT = `(function(){try{var K=${JSON.stringify(PREFILL_STORAGE_KEY)},H=${JSON.stringify(PRIVATE_LINK_KEYS)},w=window,u=new URL(w.location.href),p=u.searchParams,orig=u.search,here=u.pathname+u.search+u.hash;if(H.some(function(k){return p.has(k)})){H.forEach(function(k){p.delete(k)});var q=p.toString(),clean=u.pathname+(q?'?'+q:'')+u.hash,kept={clean:clean,query:orig};w.__stayfulPrefill=kept;try{w.sessionStorage.setItem(K,JSON.stringify(kept))}catch(e){}w.history.replaceState(w.history.state,'',clean)}else if(!w.__stayfulPrefill){try{var s=JSON.parse(w.sessionStorage.getItem(K)||'null');if(s&&s.clean!==here)w.sessionStorage.removeItem(K)}catch(e){}}}catch(e){}})();`;
+
+/**
+ * The link's query as it arrived, before PREFILL_GUARD_SCRIPT took the
+ * visitor's details out of the address bar (browser only). Falls back to the
+ * address bar as it is now.
+ */
+export function prefillSearch(): string {
+  const loc = window.location;
+  const here = loc.pathname + loc.search + loc.hash;
+  let kept: unknown = (window as unknown as { __stayfulPrefill?: unknown }).__stayfulPrefill ?? null;
+  if (!kept) {
+    try {
+      kept = JSON.parse(window.sessionStorage.getItem(PREFILL_STORAGE_KEY) || 'null');
+    } catch {
+      kept = null;
+    }
+  }
+  if (kept && typeof kept === 'object') {
+    const { clean, query } = kept as { clean?: unknown; query?: unknown };
+    if (clean === here && typeof query === 'string') return query;
+  }
+  return loc.search;
+}
+
 // ── Test leads ────────────────────────────────────────────────────
 
 /** Emails at this domain run the calculator without touching Monday or the stored reports. */

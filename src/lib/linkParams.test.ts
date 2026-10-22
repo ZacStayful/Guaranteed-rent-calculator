@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   isTestEmail,
   isTestLead,
+  PREFILL_GUARD_SCRIPT,
+  prefillSearch,
   readAttribution,
   readPrefill,
   sanitiseAttribution,
@@ -173,4 +175,78 @@ test('CALCULATOR_TEST_MODE=1 makes every run a test lead', () => {
     if (before === undefined) delete process.env.CALCULATOR_TEST_MODE;
     else process.env.CALCULATOR_TEST_MODE = before;
   }
+});
+
+// ── Keeping the visitor's details out of the address bar ─────────
+
+// A stand-in browser: an address bar, history.replaceState and session storage.
+function fakeBrowser(href: string, storage = new Map<string, string>()) {
+  const w: Record<string, unknown> = {};
+  const setHref = (h: string) => {
+    const u = new URL(h, 'https://calculator.stayful.co.uk');
+    w.location = { href: u.href, pathname: u.pathname, search: u.search, hash: u.hash };
+  };
+  setHref(href);
+  w.history = { state: null, replaceState: (_s: unknown, _t: string, url: string) => setHref(url) };
+  w.sessionStorage = {
+    getItem: (k: string) => storage.get(k) ?? null,
+    setItem: (k: string, v: string) => void storage.set(k, v),
+    removeItem: (k: string) => void storage.delete(k),
+  };
+  return { w, storage, run: () => new Function('window', PREFILL_GUARD_SCRIPT)(w) };
+}
+
+function withWindow<T>(w: Record<string, unknown>, fn: () => T): T {
+  const g = globalThis as Record<string, unknown>;
+  const before = g.window;
+  g.window = w;
+  try { return fn(); } finally { if (before === undefined) delete g.window; else g.window = before; }
+}
+
+const LINK = '/?address=10%20Park%20Square%20East&postcode=LS1%202LH&email=jo%40example.co.uk&bedrooms=2&from=%2Fairbnb-management-leeds&utm_source=google';
+
+test('the email, address and postcode leave the address bar; everything else stays', () => {
+  const b = fakeBrowser(LINK);
+  b.run();
+  const loc = b.w.location as { pathname: string; search: string };
+  assert.equal(loc.pathname + loc.search, '/?bedrooms=2&from=%2Fairbnb-management-leeds&utm_source=google');
+  assert.doesNotMatch(String((b.w.location as { href: string }).href), /example\.co\.uk|Park|LS1/);
+});
+
+test('the page still reads the whole link, so the form is pre-filled as before', () => {
+  const b = fakeBrowser(LINK);
+  b.run();
+  b.run(); // the pixel's script runs it again: no change
+  const search = withWindow(b.w, () => prefillSearch());
+  assert.deepEqual(readPrefill(search), { address: '10 Park Square East', postcode: 'LS1 2LH', email: 'jo@example.co.uk', bedrooms: 2 });
+  assert.deepEqual(readAttribution(search), { utm_source: 'google', from: '/airbnb-management-leeds' });
+});
+
+test('a reload of the cleaned address finds the details again; another page does not', () => {
+  const first = fakeBrowser(LINK);
+  first.run();
+  const clean = (first.w.location as { pathname: string; search: string });
+  const reload = fakeBrowser(clean.pathname + clean.search, first.storage);
+  reload.run();
+  assert.equal(readPrefill(withWindow(reload.w, () => prefillSearch())).email, 'jo@example.co.uk');
+  const other = fakeBrowser('/?demo=manchester', first.storage);
+  other.run();
+  assert.equal(readPrefill(withWindow(other.w, () => prefillSearch())).email, undefined);
+  assert.equal(first.storage.size, 0, 'the kept details are dropped');
+});
+
+test('a link without personal details is left alone', () => {
+  const b = fakeBrowser('/?bedrooms=3&utm_source=meta');
+  b.run();
+  assert.equal((b.w.location as { search: string }).search, '?bedrooms=3&utm_source=meta');
+  assert.equal(b.storage.size, 0);
+  assert.equal(withWindow(b.w, () => prefillSearch()), '?bedrooms=3&utm_source=meta');
+});
+
+test('blocked session storage: the address bar is still cleaned and this page load still pre-fills', () => {
+  const b = fakeBrowser(LINK);
+  b.w.sessionStorage = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); } };
+  b.run();
+  assert.doesNotMatch((b.w.location as { search: string }).search, /email|address|postcode/);
+  assert.equal(readPrefill(withWindow(b.w, () => prefillSearch())).postcode, 'LS1 2LH');
 });

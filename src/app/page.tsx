@@ -88,6 +88,7 @@ import { initTracker, endSession, trackCtaClick } from "@/lib/tracker";
 import {
   isTestEmail,
   keepAttributionForVisit,
+  prefillSearch,
   readAttribution,
   readPrefill,
   type Attribution,
@@ -620,9 +621,11 @@ export default function HomePage() {
   // Pre-fill from the link: the website forms send visitors here with the
   // details they already gave, so they never type them twice. Never submits;
   // the visitor checks the details and presses the button. A demo link
-  // pre-fills nothing. Parameters: docs/LINK_PARAMETERS.md.
+  // pre-fills nothing. Parameters: docs/LINK_PARAMETERS.md. The email, address
+  // and postcode have already left the address bar (PREFILL_GUARD_SCRIPT in
+  // src/app/layout.tsx), so the link's query is read back with prefillSearch().
   useEffect(() => {
-    const search = window.location.search;
+    const search = prefillSearch();
     attributionRef.current = keepAttributionForVisit(readAttribution(search));
 
     const prefill = readPrefill(search);
