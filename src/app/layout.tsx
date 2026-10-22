@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
+import { PREFILL_GUARD_SCRIPT } from "@/lib/linkParams";
 import "./globals.css";
 
 const inter = Inter({
@@ -38,10 +39,17 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased`}
       >
         {children}
+        {/* Takes the visitor's email, address and postcode out of the address
+            bar before anything else runs, so the pixel never sends them to
+            Meta (src/lib/linkParams.ts, PREFILL_GUARD_SCRIPT). */}
+        <Script id="prefill-guard" strategy="beforeInteractive">
+          {PREFILL_GUARD_SCRIPT}
+        </Script>
       </body>
       {META_PIXEL_ID && (
         <Script id="meta-pixel" strategy="afterInteractive">
-        {`!function(f,b,e,v,n,t,s)
+        {`${PREFILL_GUARD_SCRIPT}
+!function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};
 if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
