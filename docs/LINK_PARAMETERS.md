@@ -32,6 +32,12 @@ address fields open with what was given, so the visitor can add the rest.
 
 A demo link (`?demo=...`) loads its demo figures and ignores all of the above.
 
+**The email, address and postcode leave the address bar as soon as the page opens** (website build plan, wave 2
+fixes, 2026-10-22). The Meta pixel sends the page's whole address to Meta, so before it starts, a small script
+(`PREFILL_GUARD_SCRIPT` in `src/lib/linkParams.ts`, run from `src/app/layout.tsx`) takes those three out of the
+address with `history.replaceState` and keeps the link for the page, which still fills the form with them (also after
+a reload). Everything else (`from`, the `utm_*` tags, `bedrooms` and the rest) stays in the address.
+
 Remember to encode the link properly when building it in code (for example `encodeURIComponent` in JavaScript,
 or n8n's URL encoding), especially the address and email.
 
