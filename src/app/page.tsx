@@ -85,6 +85,9 @@ import type { AnalysisResult, RiskLevel, VerdictFit } from "@/lib/types";
 import { MARGIN_THRESHOLD, LL_AGENT_FEE, FIXED_BILLS_MONTHLY, FIXED_SOFTWARE_MONTHLY, getCostBreakdown } from "@/lib/analysis";
 import { DEMO_MAP } from "@/lib/demo-data";
 import { initTracker, endSession, trackCtaClick } from "@/lib/tracker";
+import { sendCalculatorPulse } from "@/lib/pulse";
+import { CookieSettingsButton } from "@/components/Consent";
+import { COOKIE_POLICY_URL, CONSENT_TEXT } from "@/lib/consent";
 import {
   isTestEmail,
   keepAttributionForVisit,
@@ -119,19 +122,22 @@ import {
 // section heading never lands underneath it.
 const STICKY_HEADER_H = 60;
 
-// Conversion events for a completed analysis: Meta's standard "Lead" and, once
-// Google Analytics is on the page (batch 4 adds it, with consent), its
-// "generate_lead". Called only where a run completes, so each fires once per
-// analysis. Test emails fire nothing, so test runs never train the ads. The
-// eventID lets Meta de-duplicate if a server-side copy is ever sent too.
+// Conversion events for a completed analysis: Meta's standard "Lead" and
+// Google Analytics' "generate_lead" (both only on the page once the visitor
+// has accepted cookies, src/components/Consent.tsx), and one count in
+// Stayful's own visit counter, with the page that sent the visitor and nothing
+// else (src/lib/pulse.ts). Called only where a run completes, so each fires
+// once per analysis. Test emails fire nothing, so test runs never train the
+// ads. The eventID lets Meta de-duplicate if a server-side copy is ever sent too.
 type WithFbq = { fbq?: (...args: unknown[]) => void };
 type WithGtag = { gtag?: (...args: unknown[]) => void };
 
-function trackAnalysisComplete(email: string) {
+function trackAnalysisComplete(email: string, attribution: Attribution | null) {
   if (typeof window === "undefined" || isTestEmail(email)) return;
   const eventID = `analysis-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   (window as unknown as WithFbq).fbq?.("track", "Lead", { content_name: "Guaranteed rent calculator" }, { eventID });
   (window as unknown as WithGtag).gtag?.("event", "generate_lead", { calculator: "guaranteed_rent" });
+  sendCalculatorPulse(attribution);
 }
 
 const MONTHS = [
@@ -785,7 +791,7 @@ export default function HomePage() {
               }
 
               if (event.stage === "complete" && event.data) {
-                trackAnalysisComplete(email);
+                trackAnalysisComplete(email, attributionRef.current);
                 setResult(event.data as AnalysisResult);
                 setLoading(false);
                 return;
@@ -3589,6 +3595,13 @@ export default function HomePage() {
               <p>
                 &copy; {new Date().getFullYear()} Stayful. All rights reserved.
               </p>
+              <p className="mt-4">
+                <a href={COOKIE_POLICY_URL} className="underline underline-offset-2 hover:text-foreground">
+                  {CONSENT_TEXT.policy}
+                </a>
+                {" · "}
+                <CookieSettingsButton />
+              </p>
               {/* Staff entry point to the bulk analyser. Deliberately plain and
                   low-contrast: leads see this page, so it should read as
                   housekeeping rather than an invitation. It is password-gated
@@ -4025,6 +4038,13 @@ export default function HomePage() {
           <p className="mt-2">
             Data sourced from Airbtics, PropertyData, Google Places, Ticketmaster,
             and public market research.
+          </p>
+          <p className="mt-4">
+            <a href={COOKIE_POLICY_URL} className="underline underline-offset-2 hover:text-foreground">
+              {CONSENT_TEXT.policy}
+            </a>
+            {" · "}
+            <CookieSettingsButton />
           </p>
           {/* Staff entry point to the bulk analyser — see the note on the other
               footer. Both render paths need it, or the link disappears once a

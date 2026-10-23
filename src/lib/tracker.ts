@@ -3,6 +3,12 @@
 // analysis reports. Captures scroll depth, section dwell time, CTA
 // clicks, click positions, and scroll stops. Calculates an overall
 // engagement score (0-100). Sends data to /api/track on page unload.
+//
+// The session holds the property's address and postcode, so it is kept on the
+// device and sent only once the visitor has accepted cookies (batch 4 task 1,
+// src/lib/consent.ts). Before that it is measured in memory and dropped.
+
+import { consentGranted } from "./consent.ts";
 
 export interface SessionData {
   sessionId: string;
@@ -149,6 +155,7 @@ function handleClick(e: MouseEvent): void {
 
 function handleBeforeUnload(): void {
   const data = endSession();
+  if (!consentGranted()) return;
   try {
     const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
     navigator.sendBeacon("/api/track", blob);
@@ -205,6 +212,7 @@ const STORAGE_KEY = "stayful_sessions";
 const MAX_SESSIONS = 50;
 
 function storeSession(data: SessionData): void {
+  if (!consentGranted()) return;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const sessions: SessionData[] = raw ? JSON.parse(raw) : [];
