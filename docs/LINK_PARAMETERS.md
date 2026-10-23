@@ -66,11 +66,35 @@ lead writes the same columns). This is a separate Monday update from the figures
 columns can never stop the figures or the PDF landing. The existing "Lead source" column is not touched. The
 calculator still never creates a lead: with no matching lead, nothing is written, exactly as before.
 
+## Cookies, the pixel and Google Analytics
+
+**The Meta pixel and Google Analytics start only when the visitor presses Accept** on the cookie banner (website
+build plan, batch 4; Zac 2026-10-23). The banner's words and its cookie are the website's (`src/lib/consent.ts`,
+`src/components/Consent.tsx`, the same files as the management calculator's): the choice is `stayful_consent` on
+`.stayful.co.uk`, so a choice made on www.stayful.co.uk or the management calculator holds here and the other way
+round. Reject removes their cookies; "Cookie settings" in the footer opens the banner again. The session tracker's
+stored sessions (`src/lib/tracker.ts`, which hold the property's address) wait for Accept too.
+
+- **Google Analytics** is the website's property, G-ZFC7PTYMP9, and runs only on guaranteedrent.stayful.co.uk. Its
+  `_ga` cookie sits on `.stayful.co.uk`, so Analytics sees one visitor moving between www and the calculator.
+- **The Meta pixel** loads wherever `NEXT_PUBLIC_META_PIXEL_ID` is set, after Accept. Meta's "automatic advanced
+  matching" is switched on for this pixel in Events Manager: it reads the email typed into the form and sends it to
+  Meta hashed. The page switches it off for this pixel as soon as Meta's code loads (found and fixed 2026-10-23; the
+  website's ruling is that visitors' emails are kept away from Meta). The lasting fix is to switch it off in Events
+  Manager too.
+- **Stayful's own visit counter** gets one count per finished analysis, with the page that sent the visitor
+  (`from`) and nothing else (`src/lib/pulse.ts`). It stores nothing on the device, so it does not wait for the
+  banner, and it sends only from guaranteedrent.stayful.co.uk.
+
+To check all of this in a real browser, against Meta's and Google's real code with everything they send caught
+locally: `NEXT_PUBLIC_META_PIXEL_ID=687157345550761 npm run build`, then
+`node --import ./scripts/register-test-resolver.mjs scripts/consent-browser.mjs`.
+
 ## Conversion events
 
-When an analysis completes, the Meta pixel's `Lead` event fires once (with an event id). If Google Analytics is
-on the page (it is not yet; that comes with the cookie consent work), a `generate_lead` event fires too. The
-pixel only loads when `NEXT_PUBLIC_META_PIXEL_ID` is set (the same pixel as the management calculator).
+When an analysis completes, the Meta pixel's `Lead` event and Google Analytics' `generate_lead` event fire once
+each (the `Lead` with an event id), if the visitor accepted cookies, and the visit counter gets its count. The
+pixel is the same one as the management calculator's.
 
 This calculator never offers a way to book a call. Nothing here changes that.
 
@@ -83,7 +107,7 @@ to end without touching anything real:
 - no report is stored in Supabase;
 - nothing is read from or written to Monday (no lead lookup, no figures, no status, no PDF, no use count);
 - the free-analysis limit does not apply;
-- no Meta pixel or Google Analytics conversion event fires;
+- no Meta pixel or Google Analytics conversion event fires, and the visit counter is not told;
 - the form shows "Test email: this run will not be saved to Monday."
 
 To make **every** run of the form a test run on a deployment (for example Vercel previews), set

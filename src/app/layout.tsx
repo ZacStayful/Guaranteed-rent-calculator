@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import { PREFILL_GUARD_SCRIPT } from "@/lib/linkParams";
+import { Consent } from "@/components/Consent";
 import "./globals.css";
 
 const inter = Inter({
@@ -40,27 +41,16 @@ export default function RootLayout({
       >
         {children}
         {/* Takes the visitor's email, address and postcode out of the address
-            bar before anything else runs, so the pixel never sends them to
-            Meta (src/lib/linkParams.ts, PREFILL_GUARD_SCRIPT). */}
+            bar before anything else runs, so neither the pixel nor Google
+            Analytics ever sends them on (src/lib/linkParams.ts,
+            PREFILL_GUARD_SCRIPT). */}
         <Script id="prefill-guard" strategy="beforeInteractive">
           {PREFILL_GUARD_SCRIPT}
         </Script>
+        {/* The cookie banner. The Meta pixel and Google Analytics start only
+            after Accept (src/components/Consent.tsx). */}
+        <Consent pixelId={META_PIXEL_ID} />
       </body>
-      {META_PIXEL_ID && (
-        <Script id="meta-pixel" strategy="afterInteractive">
-        {`${PREFILL_GUARD_SCRIPT}
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '${META_PIXEL_ID}');
-fbq('track', 'PageView');`}
-        </Script>
-      )}
     </html>
   );
 }
